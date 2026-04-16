@@ -165,9 +165,17 @@ def call_claude(system_prompt: str, user_prompt: str) -> dict:
 
     raw_text = message.content[0].text
 
+    # Claude a veces envuelve el JSON en bloques markdown ```json ... ```
+    # aunque el prompt pida solo JSON. Lo limpiamos antes de parsear.
+    cleaned_text = raw_text.strip()
+    if cleaned_text.startswith("```"):
+        lines = cleaned_text.split("\n")
+        # Quitar primera línea (```json o ```) y última línea (```)
+        cleaned_text = "\n".join(lines[1:-1]).strip()
+
     # Intentar parsear como JSON — si falla, hay un problema con el prompt
     try:
-        parsed_output = json.loads(raw_text)
+        parsed_output = json.loads(cleaned_text)
         parse_success = True
     except json.JSONDecodeError as e:
         parsed_output = {"error": "json_parse_failed", "detail": str(e), "raw": raw_text}
