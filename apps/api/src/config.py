@@ -24,5 +24,9 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/1"
 
+    # Supabase Auth — el JWT secret se obtiene en:
+    # Supabase Dashboard → Project Settings → API → JWT Secret
+    supabase_jwt_secret: str = ""
+
 
 settings = Settings()
