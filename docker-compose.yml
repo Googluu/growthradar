@@ -52,7 +52,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: growth_radar
     ports:
-      - "5432:5432"
+      - "5435:5432"  # 5432-5434 ocupados por instancias locales
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -66,7 +66,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "6380:6379"  # 6379 ocupado por Redis local del sistema
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
