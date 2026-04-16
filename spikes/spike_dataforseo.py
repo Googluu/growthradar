@@ -54,8 +54,6 @@ def get_onpage_instant(url: str) -> dict:
             "url": url,
             "load_resources": True,     # incluye recursos (CSS, JS, imágenes)
             "enable_javascript": False,  # sin JS para este spike (más rápido)
-            "custom_js": "",
-            "checks_threshold": {},
         }
     ]
 
@@ -163,7 +161,8 @@ def parse_domain_rank(raw: dict) -> dict:
                 "status_code": task.get("status_code"),
             }
 
-        metrics = task["result"][0]["metrics"].get("organic", {})
+        # La estructura es: result[0]["items"][0]["metrics"]
+        metrics = task["result"][0]["items"][0]["metrics"].get("organic", {})
         return {
             "etv": metrics.get("etv", 0),           # estimated traffic value (mensual)
             "count": metrics.get("count", 0),         # keywords en top 100
