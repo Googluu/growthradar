@@ -6,6 +6,7 @@ En producción: uvicorn src.main:app --host 0.0.0.0 --port 8000
 from fastapi import FastAPI
 
 from src.config import settings
+from src.routes.auth import router as auth_router
 from src.routes.health import router as health_router
 
 app = FastAPI(
@@ -16,3 +17,4 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(auth_router)
