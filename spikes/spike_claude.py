@@ -154,7 +154,7 @@ def call_claude(system_prompt: str, user_prompt: str) -> dict:
 
     message = client.messages.create(
         model=MODEL,
-        max_tokens=2048,
+        max_tokens=4096,  # 5 recomendaciones detalladas en español necesitan ~3000 tokens
         system=system_prompt,
         messages=[
             {"role": "user", "content": user_prompt}
