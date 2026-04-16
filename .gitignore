@@ -1,0 +1,43 @@
+# Environment variables — NUNCA commitear
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+*.egg-info/
+
+# uv
+.uv/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+
+# Build outputs
+dist/
+build/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Spike outputs (los resultados se guardan en docs/spikes/, no en el raíz)
+spikes/outputs/
+
+# Otros
+notion/
