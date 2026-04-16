@@ -85,10 +85,10 @@ El verdadero foso es la **capa de coincidencia de IA**: el sistema comprende tan
 | Base de datos | PostgreSQL | Estructura relacional para empresas, leads, campañas |
 | Cola de trabajos | Apio + Redis | Trabajos de extensión y scraping asíncrono |
 | IA / Máster en Derecho | Claude API (Antrópico) | El mejor razonamiento de su clase para análisis y generación de mensajes |
-| Raspado | Dramaturgo + httpx | Cobertura de página dinámica y estática |
+| Raspado | Playwright + httpx | Cobertura de página dinámica y estática |
 | Envío de correo electrónico | Reenviar / Amazon SES | Capacidad de entrega confiable |
 | Autenticación | Autenticación de Supabase | Rápido de implementar, escalable |
-| Alojamiento | Ferrocarril (MVP) → AWS (escala) | Ruta de implementación sencilla |
+| Alojamiento | Railway (MVP) → AWS (escala) | Ruta de implementación sencilla |
 
 ---
 
@@ -98,10 +98,10 @@ El verdadero foso es la **capa de coincidencia de IA**: el sistema comprende tan
 radar de crecimiento/
 ├── README.md # Este archivo: visión y descripción general del proyecto
 ├── documentos/
-│ ├── arquitectura.md # Arquitectura técnica en profundidad
+│ ├── architecture.md # Arquitectura técnica en profundidad
 │ ├── mvp-scope.md # Definición de características de MVP y criterios de aceptación
 │ └── roadmap.md # Fases de desarrollo e hitos
-├── aplicaciones/
+├── app/
 │ ├── api/ # motor FastAPI
 │ └── web/ # Interfaz Next.js
 ├── paquetes/

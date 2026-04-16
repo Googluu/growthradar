@@ -52,11 +52,11 @@ Este es elegido como MVP porque:
 | Categoría | Puntos de datos | Fuente |
 |----------|------------|--------|
 | Rendimiento | Puntuación de PageSpeed, LCP, FID, CLS, dispositivos móviles frente a computadoras de escritorio | API de velocidad de página de Google |
-| SEO | Metaetiquetas, estructura H1, robots.txt, presencia en el mapa del sitio, títulos de página | Dramaturgo + analizador personalizado |
+| SEO | Metaetiquetas, estructura H1, robots.txt, presencia en el mapa del sitio, títulos de página | Playwright + analizador personalizado |
 | SEO | Señales de clasificación de palabras clave, tráfico estimado | SerpAPI (o DataForSEO) |
 | Vínculos de retroceso | Recuento de dominios de referencia, autoridad del dominio | API de Moz (nivel gratuito) |
 | Sociales | Recuento de seguidores de Instagram, fecha de la última publicación | API de visualización básica de Instagram |
-| Sociales | Presencia en la página de empresa de LinkedIn | Rasguño del dramaturgo |
+| Sociales | Presencia en la página de empresa de LinkedIn | Rasguño del Playwright |
 | Reputación | Calificación de Google Maps, recuento de reseñas, tasa de respuesta | SerpAPI Google Maps |
 
 **Integración de API de Claude:**
@@ -134,7 +134,7 @@ El MVP está "listo" cuando se cumple todo lo siguiente:
 3. Modelo de empresa + puntos finales CRUD
 4. Modelo de trabajo de auditoría + configuración del trabajador de apio
 5. Integración de la API de PageSpeed + extracción de puntuación
-6. Scraper de dramaturgo: contenido del sitio web, metaetiquetas, conceptos básicos de SEO
+6. Scraper de Playwright: contenido del sitio web, metaetiquetas, conceptos básicos de SEO
 7. Integración SerpAPI: señales de palabras clave + datos de Google Maps
 8. Integración de la API de Moz: datos de vínculo de retroceso
 9. Módulo de cálculo de puntuación (promedio ponderado, por categoría)
