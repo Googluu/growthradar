@@ -80,10 +80,10 @@ El verdadero foso es la **capa de coincidencia de IA**: el sistema comprende tan
 
 | Capa | Tecnología | Por qué |
 |-------|-----------|-----|
-| API de back-end | Python + API rápida | Ecosistema de raspado/IA rico y asincrónico primero |
+| API de back-end | Python + FastAPI | Ecosistema de raspado/IA rico y asincrónico primero |
 | Interfaz | Next.js 14 + TypeScript + Viento de cola | Iteración rápida del panel, SSR para rendimiento |
 | Base de datos | PostgreSQL | Estructura relacional para empresas, leads, campañas |
-| Cola de trabajos | Apio + Redis | Trabajos de extensión y scraping asíncrono |
+| Cola de trabajos | Celery + Redis | Trabajos de extensión y scraping asíncrono |
 | IA / Máster en Derecho | Claude API (Antrópico) | El mejor razonamiento de su clase para análisis y generación de mensajes |
 | Raspado | Playwright + httpx | Cobertura de página dinámica y estática |
 | Envío de correo electrónico | Reenviar / Amazon SES | Capacidad de entrega confiable |
@@ -97,14 +97,14 @@ El verdadero foso es la **capa de coincidencia de IA**: el sistema comprende tan
 ```
 radar de crecimiento/
 ├── README.md # Este archivo: visión y descripción general del proyecto
-├── documentos/
+├── docs/
 │ ├── architecture.md # Arquitectura técnica en profundidad
 │ ├── mvp-scope.md # Definición de características de MVP y criterios de aceptación
 │ └── roadmap.md # Fases de desarrollo e hitos
 ├── app/
 │ ├── api/ # motor FastAPI
 │ └── web/ # Interfaz Next.js
-├── paquetes/
+├── packages/
 │ ├── motor de auditoría / # Lógica de puntuación y raspado de auditoría digital
 │ ├── motor líder/ # Lógica de clasificación y descubrimiento de clientes potenciales
 │ └── motor de extensión/ # lógica de envío y generación de mensajes de IA
@@ -118,14 +118,14 @@ radar de crecimiento/
 - **Claridad sobre velocidad**: cada decisión, modelo de datos y contrato API se documenta antes de escribir el código.
 - **Software que funciona sobre abstracciones**: sin ingeniería excesiva; construir exactamente lo que necesita la fase actual
 - **Cortes verticales**: cada fase ofrece una función completa y demostrable, no una capa parcial.
-- **Documente a medida que crea**: los comentarios del código explican *por qué*, no *qué*; LÉAME permanece actualizado
+- **Documente a medida que crea**: los comentarios del código explican *por qué*, no *qué*; README permanece actualizado
 
 ---
 
 ## Gestión de proyectos
 
 - **GitHub** — fuente de verdad para el código y las decisiones técnicas (problemas, relaciones públicas)
-- **Noción**: visión del producto, investigación de usuarios, tablero Kanban, notas de reuniones
+- **Notion**: visión del producto, investigación de usuarios, tablero Kanban, notas de reuniones
 - **README / docs/** — referencia técnica siempre actualizada
 - **Comentarios de código**: contexto en línea para decisiones no obvias
 

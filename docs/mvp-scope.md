@@ -51,7 +51,7 @@ Este es elegido como MVP porque:
 
 | Categoría | Puntos de datos | Fuente |
 |----------|------------|--------|
-| Rendimiento | Puntuación de PageSpeed, LCP, FID, CLS, dispositivos móviles frente a computadoras de escritorio | API de velocidad de página de Google |
+| Rendimiento | Puntuación de PageSpeed(Usaremos API de CrUX), LCP, FID, CLS, dispositivos móviles frente a computadoras de escritorio | API de velocidad de página de Google |
 | SEO | Metaetiquetas, estructura H1, robots.txt, presencia en el mapa del sitio, títulos de página | Playwright + analizador personalizado |
 | SEO | Señales de clasificación de palabras clave, tráfico estimado | SerpAPI (o DataForSEO) |
 | Vínculos de retroceso | Recuento de dominios de referencia, autoridad del dominio | API de Moz (nivel gratuito) |
