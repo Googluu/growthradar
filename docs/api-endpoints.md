@@ -144,6 +144,134 @@ Actualiza solo los campos enviados (partial update).
 
 ---
 
+## Audits
+
+Todos los endpoints requieren `Authorization: Bearer <token>`.
+Una auditoría es un **job asíncrono**: se dispara con POST y el resultado
+se consulta con GET haciendo polling hasta que `status` sea `completed` o `failed`.
+
+### Flujo completo
+```
+1. POST /companies/{id}/audits   → recibe job_id (status: pending)
+2. GET  /audits/{job_id}         → polling cada ~3s hasta status: completed
+3. Leer result del GET anterior  → health_score, scores, recomendaciones
+```
+
+---
+
+### `POST /companies/{company_id}/audits`
+Dispara una nueva auditoría para la empresa. El job se encola en Celery y la
+API responde **de inmediato** con el `job_id` — sin esperar a que termine.
+
+> Usa HTTP 202 Accepted (no 201) para indicar que la tarea fue aceptada pero aún no completada.
+
+**Params:** `company_id` — UUID de la empresa
+
+**Response 202:**
+```json
+{
+  "job_id": "ea7b936b-4189-4c9e-9587-e7dc2dd71509",
+  "status": "pending"
+}
+```
+
+**Errores:**
+| Código | Motivo |
+|--------|--------|
+| 404 | La empresa no existe o no pertenece al usuario |
+
+---
+
+### `GET /audits/{job_id}`
+Consulta el estado actual de una auditoría. El frontend llama este endpoint
+cada ~3 segundos hasta que `status` cambia a `completed` o `failed`.
+
+**Params:** `job_id` — UUID retornado por el POST anterior
+
+**Response 200 — mientras corre:**
+```json
+{
+  "id": "ea7b936b-4189-4c9e-9587-e7dc2dd71509",
+  "company_id": "b414ccc9-457a-46c4-adf7-fbe650c9c37f",
+  "owner_id": "uuid-del-usuario",
+  "status": "running",
+  "result": null,
+  "error": null,
+  "created_at": "2026-04-17T17:42:54.123Z",
+  "started_at": "2026-04-17T17:42:55.456Z",
+  "completed_at": null
+}
+```
+
+**Response 200 — cuando termina:**
+```json
+{
+  "id": "ea7b936b-4189-4c9e-9587-e7dc2dd71509",
+  "company_id": "b414ccc9-457a-46c4-adf7-fbe650c9c37f",
+  "owner_id": "uuid-del-usuario",
+  "status": "completed",
+  "result": {
+    "health_score": 47,
+    "scores": {
+      "performance_score": 72,
+      "seo_score": 31,
+      "social_score": 18,
+      "reputation_score": 55
+    },
+    "note": "Resultado mock — integración real pendiente"
+  },
+  "error": null,
+  "created_at": "2026-04-17T17:42:54.123Z",
+  "started_at": "2026-04-17T17:42:55.456Z",
+  "completed_at": "2026-04-17T17:43:00.400Z"
+}
+```
+
+**Ciclo de vida del campo `status`:**
+| Valor | Significado |
+|-------|-------------|
+| `pending` | Job encolado, worker aún no lo tomó |
+| `running` | Worker procesando la auditoría |
+| `completed` | Auditoría lista — leer `result` |
+| `failed` | Error durante la auditoría — leer `error` |
+
+**Errores:**
+| Código | Motivo |
+|--------|--------|
+| 404 | El job no existe o no pertenece al usuario |
+
+---
+
+### `GET /companies/{company_id}/audits`
+Lista el historial completo de auditorías de una empresa, ordenado de más
+reciente a más antiguo. Útil para la vista de historial y comparación de scores.
+
+**Params:** `company_id` — UUID de la empresa
+
+**Response 200:**
+```json
+[
+  {
+    "id": "ea7b936b-4189-4c9e-9587-e7dc2dd71509",
+    "company_id": "b414ccc9-457a-46c4-adf7-fbe650c9c37f",
+    "owner_id": "uuid-del-usuario",
+    "status": "completed",
+    "result": { "health_score": 47, "scores": { ... } },
+    "error": null,
+    "created_at": "2026-04-17T17:42:54.123Z",
+    "started_at": "2026-04-17T17:42:55.456Z",
+    "completed_at": "2026-04-17T17:43:00.400Z"
+  }
+]
+```
+
+**Errores:**
+| Código | Motivo |
+|--------|--------|
+| 404 | La empresa no existe o no pertenece al usuario |
+
+---
+
 ## Generar token de prueba (desarrollo local)
 
 Para probar con Postman sin tener el frontend listo, genera un JWT manualmente con el script en la raíz:
