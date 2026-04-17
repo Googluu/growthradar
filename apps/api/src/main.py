@@ -11,6 +11,7 @@ from src.config import settings
 from src.database import Base, engine
 import src.models  # noqa: F401 — registra todos los modelos en Base.metadata
 from src.routes.auth import router as auth_router
+from src.routes.audits import router as audits_router
 from src.routes.companies import router as companies_router
 from src.routes.health import router as health_router
 
@@ -35,3 +36,4 @@ app = FastAPI(
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(companies_router)
+app.include_router(audits_router)

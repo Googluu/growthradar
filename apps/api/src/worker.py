@@ -22,6 +22,5 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="America/Bogota",
     enable_utc=True,
-    # Autodiscover tasks en src/tasks/ cuando se agreguen
-    include=["src.tasks"],
+    include=["src.tasks.audit"],
 )
