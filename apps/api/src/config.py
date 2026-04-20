@@ -36,5 +36,8 @@ class Settings(BaseSettings):
     # https://app.dataforseo.com/api-access
     dataforseo_api_key: str = ""
 
+    # Anthropic Claude API
+    anthropic_api_key: str = ""
+
 
 settings = Settings()

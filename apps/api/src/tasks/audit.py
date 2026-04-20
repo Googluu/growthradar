@@ -1,15 +1,10 @@
 """
 Celery task: run_audit
 
-Ejecuta la auditoría completa de una empresa:
-  Fase 1 (esta tarea): CrUX → performance_score
-  Fase 2 (próxima):    DataForSEO → seo_score
-  Fase 3:              Claude API → recomendaciones
-
-El task recibe el job_id (str) y:
-  1. Marca el job como "running"
-  2. Consulta CrUX para obtener performance_score real
-  3. Guarda el resultado y marca como "completed" (o "failed")
+Flujo completo de auditoría:
+  1. CrUX API        → performance_score (datos de campo reales)
+  2. DataForSEO      → seo_score (on-page + autoridad de dominio)
+  3. Claude API      → recomendaciones accionables en lenguaje natural
 """
 
 import uuid
@@ -34,6 +29,7 @@ def run_audit(self: "run_audit", job_id: str) -> dict:  # type: ignore[type-arg]
     from src.models.company import Company
     from src.services.crux import CruxNoDataError, query_crux
     from src.services.dataforseo import calculate_seo_score, get_domain_rank, get_onpage_data
+    from src.services.recommendations import generate_recommendations
 
     job_uuid = uuid.UUID(job_id)
 
@@ -99,6 +95,27 @@ def run_audit(self: "run_audit", job_id: str) -> dict:  # type: ignore[type-arg]
 
             available = [s for s in result["scores"].values() if s is not None]
             result["health_score"] = round(sum(available) / len(available)) if available else None
+
+            # ── Fase 5: Claude API → recomendaciones ─────────────────────
+            recs_note: str | None = None
+            try:
+                audit_payload = {
+                    "company_name": company.name if company else domain,  # type: ignore[union-attr]
+                    "company_domain": domain,
+                    "health_score": result["health_score"],
+                    "scores": result["scores"],
+                    "crux": crux_data,
+                    "seo": {"onpage": onpage_data, "domain_rank": domain_rank_data},
+                }
+                result["recommendations"] = generate_recommendations(
+                    company_name=company.name if company else domain,  # type: ignore[union-attr]
+                    company_domain=domain,
+                    audit_data=audit_payload,
+                )
+            except Exception as recs_exc:
+                recs_note = f"recommendations_error: {recs_exc}"
+            if recs_note:
+                result["recommendations_note"] = recs_note
 
             job.status = "completed"
             job.result = result
