@@ -17,7 +17,8 @@ from src.config import settings
 
 _MODEL = "claude-sonnet-4-6"
 _MAX_TOKENS = 4096
-_PROMPT_PATH = Path(__file__).parents[4] / "packages/audit-engine/prompts/recommendations_v1.md"
+# En el container: /app/src/services/recommendations.py → parents[2] = /app
+_PROMPT_PATH = Path(__file__).parents[2] / "packages/audit-engine/prompts/recommendations_v1.md"
 
 
 def _load_prompt() -> tuple[str, str]:

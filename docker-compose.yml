@@ -12,6 +12,7 @@ services:
     volumes:
       # Hot reload: monta el código fuente en desarrollo
       - ./apps/api/src:/app/src
+      - ./packages:/app/packages
     command: >
       uv run uvicorn src.main:app
         --host 0.0.0.0
@@ -33,6 +34,7 @@ services:
       - apps/api/.env
     volumes:
       - ./apps/api/src:/app/src
+      - ./packages:/app/packages
     command: >
       uv run celery -A src.worker.celery_app worker
         --loglevel=info
