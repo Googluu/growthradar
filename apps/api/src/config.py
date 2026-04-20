@@ -28,5 +28,9 @@ class Settings(BaseSettings):
     # Supabase Dashboard → Project Settings → API → JWT Secret
     supabase_jwt_secret: str = ""
 
+    # CrUX API (Chrome User Experience Report)
+    # Google Cloud Console → APIs → CrUX API → Credentials
+    crux_api_key: str = ""
+
 
 settings = Settings()

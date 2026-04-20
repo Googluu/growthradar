@@ -1,20 +1,17 @@
 """
 Celery task: run_audit
 
-Placeholder que simula el flujo completo de una auditoría.
-En tareas siguientes se reemplaza el mock por llamadas reales a:
-  - CrUX API      → performance_score
-  - DataForSEO    → seo_score
-  - Playwright    → social_score (próximamente)
-  - Claude API    → recomendaciones
+Ejecuta la auditoría completa de una empresa:
+  Fase 1 (esta tarea): CrUX → performance_score
+  Fase 2 (próxima):    DataForSEO → seo_score
+  Fase 3:              Claude API → recomendaciones
 
-El task recibe el job_id (str) y se encarga de:
-  1. Marcar el job como "running"
-  2. Ejecutar la auditoría (ahora: sleep 5s + resultado mock)
-  3. Guardar el resultado y marcar como "completed" (o "failed" si hay error)
+El task recibe el job_id (str) y:
+  1. Marca el job como "running"
+  2. Consulta CrUX para obtener performance_score real
+  3. Guarda el resultado y marca como "completed" (o "failed")
 """
 
-import time
 import uuid
 from datetime import datetime, timezone
 
@@ -25,7 +22,6 @@ from src.config import settings
 from src.worker import celery_app
 
 # Celery workers son síncronos — usamos el engine síncrono (psycopg2)
-# La URL async usa asyncpg; para el worker reemplazamos el driver
 _sync_db_url = settings.database_url.replace(
     "postgresql+asyncpg://", "postgresql+psycopg2://"
 )
@@ -34,11 +30,9 @@ _engine = create_engine(_sync_db_url, pool_pre_ping=True)
 
 @celery_app.task(name="audit.run_audit", bind=True, max_retries=2)
 def run_audit(self: "run_audit", job_id: str) -> dict:  # type: ignore[type-arg]
-    """
-    Ejecuta una auditoría completa para el job dado.
-    bind=True permite acceder a self.retry() si algo falla.
-    """
-    from src.models.audit_job import AuditJob  # import local para evitar circular
+    from src.models.audit_job import AuditJob
+    from src.models.company import Company
+    from src.services.crux import CruxNoDataError, query_crux
 
     job_uuid = uuid.UUID(job_id)
 
@@ -53,28 +47,48 @@ def run_audit(self: "run_audit", job_id: str) -> dict:  # type: ignore[type-arg]
         db.commit()
 
         try:
-            # ── Fase 2: auditoría (placeholder) ───────────────────────────
-            # TODO: reemplazar con CrUX + DataForSEO + Claude en tareas siguientes
-            time.sleep(5)
+            company = db.get(Company, job.company_id)
+            domain = f"https://{company.domain}" if company else ""  # type: ignore[union-attr]
 
-            mock_result = {
-                "health_score": 47,
+            # ── Fase 2: CrUX → performance_score ─────────────────────────
+            crux_data: dict | None = None
+            performance_score: int | None = None
+            crux_note: str | None = None
+
+            try:
+                crux_data = query_crux(domain)
+                performance_score = crux_data["performance_score"]
+            except CruxNoDataError:
+                # ~40-50% de pymes LATAM no tienen datos en CrUX
+                # TODO Fase siguiente: ejecutar Lighthouse headless como fallback
+                crux_note = "no_crux_data — fallback pendiente"
+            except Exception as crux_exc:
+                crux_note = f"crux_error: {crux_exc}"
+
+            # ── Fase 3: construir resultado ───────────────────────────────
+            result: dict = {
+                "performance_score": performance_score,
                 "scores": {
-                    "performance_score": 72,
-                    "seo_score": 31,
-                    "social_score": 18,
-                    "reputation_score": 55,
+                    "performance_score": performance_score,
+                    "seo_score": None,       # DataForSEO — próxima fase
+                    "social_score": None,    # Playwright — pendiente
+                    "reputation_score": None,
                 },
-                "note": "Resultado mock — integración real pendiente",
+                "crux": crux_data,
             }
+            if crux_note:
+                result["crux_note"] = crux_note
 
-            # ── Fase 3: guardar resultado ─────────────────────────────────
+            # health_score: por ahora solo refleja performance hasta tener todos los scores
+            available = [s for s in result["scores"].values() if s is not None]
+            result["health_score"] = round(sum(available) / len(available)) if available else None
+
             job.status = "completed"
-            job.result = mock_result
+            job.result = result
             job.completed_at = datetime.now(timezone.utc)
             db.commit()
 
-            return mock_result
+            return result
 
         except Exception as exc:
             job.status = "failed"
