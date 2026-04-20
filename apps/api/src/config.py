@@ -32,5 +32,9 @@ class Settings(BaseSettings):
     # Google Cloud Console → APIs → CrUX API → Credentials
     crux_api_key: str = ""
 
+    # DataForSEO — valor en Base64 "email:password"
+    # https://app.dataforseo.com/api-access
+    dataforseo_api_key: str = ""
+
 
 settings = Settings()

@@ -33,6 +33,7 @@ def run_audit(self: "run_audit", job_id: str) -> dict:  # type: ignore[type-arg]
     from src.models.audit_job import AuditJob
     from src.models.company import Company
     from src.services.crux import CruxNoDataError, query_crux
+    from src.services.dataforseo import calculate_seo_score, get_domain_rank, get_onpage_data
 
     job_uuid = uuid.UUID(job_id)
 
@@ -48,7 +49,8 @@ def run_audit(self: "run_audit", job_id: str) -> dict:  # type: ignore[type-arg]
 
         try:
             company = db.get(Company, job.company_id)
-            domain = f"https://{company.domain}" if company else ""  # type: ignore[union-attr]
+            domain = company.domain if company else ""  # type: ignore[union-attr]
+            url = f"https://{domain}"
 
             # ── Fase 2: CrUX → performance_score ─────────────────────────
             crux_data: dict | None = None
@@ -56,30 +58,45 @@ def run_audit(self: "run_audit", job_id: str) -> dict:  # type: ignore[type-arg]
             crux_note: str | None = None
 
             try:
-                crux_data = query_crux(domain)
+                crux_data = query_crux(url)
                 performance_score = crux_data["performance_score"]
             except CruxNoDataError:
-                # ~40-50% de pymes LATAM no tienen datos en CrUX
-                # TODO Fase siguiente: ejecutar Lighthouse headless como fallback
                 crux_note = "no_crux_data — fallback pendiente"
             except Exception as crux_exc:
                 crux_note = f"crux_error: {crux_exc}"
 
-            # ── Fase 3: construir resultado ───────────────────────────────
+            # ── Fase 3: DataForSEO → seo_score ───────────────────────────
+            onpage_data: dict | None = None
+            domain_rank_data: dict | None = None
+            seo_score: int | None = None
+            seo_note: str | None = None
+
+            try:
+                onpage_data = get_onpage_data(url)
+                domain_rank_data = get_domain_rank(domain)
+                seo_score = calculate_seo_score(onpage_data)
+            except Exception as seo_exc:
+                seo_note = f"dataforseo_error: {seo_exc}"
+
+            # ── Fase 4: construir resultado ───────────────────────────────
             result: dict = {
-                "performance_score": performance_score,
                 "scores": {
                     "performance_score": performance_score,
-                    "seo_score": None,       # DataForSEO — próxima fase
+                    "seo_score": seo_score,
                     "social_score": None,    # Playwright — pendiente
                     "reputation_score": None,
                 },
                 "crux": crux_data,
+                "seo": {
+                    "onpage": onpage_data,
+                    "domain_rank": domain_rank_data,
+                },
             }
             if crux_note:
                 result["crux_note"] = crux_note
+            if seo_note:
+                result["seo_note"] = seo_note
 
-            # health_score: por ahora solo refleja performance hasta tener todos los scores
             available = [s for s in result["scores"].values() if s is not None]
             result["health_score"] = round(sum(available) / len(available)) if available else None
 
