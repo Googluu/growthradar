@@ -23,7 +23,7 @@ class AuditJob(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
 
     # Resultado completo de la auditoría (JSON) — null mientras corre
-    result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    result: Mapped[dict[str, object | None] | None] = mapped_column(JSON, nullable=True)
     # Mensaje de error si status == "failed"
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
