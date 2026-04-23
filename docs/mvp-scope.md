@@ -66,6 +66,44 @@ Este es elegido como MVP porque:
 
 ---
 
+## Ideas para fases futuras
+
+> Ideas surgidas durante el desarrollo que tienen potencial de producto pero se difieren
+> para no romper el alcance del MVP.
+
+---
+
+### Vista dual de resultados: Dueño vs Desarrollador
+
+**Idea:** El reporte de auditoría ofrece dos modos de visualización intercambiables:
+
+**Vista "Dueño de negocio"** (actual — lenguaje natural)
+- Explicaciones en español claro sin jerga técnica
+- Impacto en términos de clientes, ventas y visibilidad
+- Recomendaciones priorizadas por quick wins
+- Generada por Claude con el prompt actual
+
+**Vista "Desarrollador"** (futura)
+- Problemas técnicos específicos con el código o configuración exacta a cambiar
+- Referencias a archivos, etiquetas HTML, headers HTTP o configuración del servidor
+- Ejemplos de código "antes/después" para cada fix
+- Ordenado por severidad técnica, no por impacto de negocio
+- Requiere un prompt separado de Claude orientado a developers
+
+**Por qué vale la pena:**
+- Una pyme típica tiene un dueño que no sabe de código y un dev freelance que sí sabe
+- Hoy el dueño ve el reporte y se lo manda al dev → el dev no sabe cómo mapear las recomendaciones a código
+- Con la vista dev, el dev puede actuar directamente sin interpretación
+- Potencial de monetización: la vista dev podría ser un tier de pago superior
+
+**Implementación sugerida:**
+- Nuevo campo `mode: "owner" | "developer"` en el endpoint de recomendaciones
+- Prompt separado `recommendations_developer_v1.md` en `packages/audit-engine/prompts/`
+- Toggle en la UI del reporte — mismo job, distinta presentación
+- No requiere re-auditar: es un post-procesamiento del resultado ya guardado
+
+---
+
 ## Lo que NO está en el MVP
 
 Estos se difieren explícitamente para evitar cambios en el alcance:

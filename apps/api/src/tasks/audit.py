@@ -30,6 +30,7 @@ def run_audit(self: "run_audit", job_id: str) -> dict:  # type: ignore[type-arg]
     from src.services.crux import CruxNoDataError, query_crux
     from src.services.dataforseo import calculate_seo_score, get_domain_rank, get_onpage_data
     from src.services.recommendations import generate_recommendations
+    from src.services.scoring import calculate_health_score
 
     job_uuid = uuid.UUID(job_id)
 
@@ -93,8 +94,10 @@ def run_audit(self: "run_audit", job_id: str) -> dict:  # type: ignore[type-arg]
             if seo_note:
                 result["seo_note"] = seo_note
 
-            available = [s for s in result["scores"].values() if s is not None]
-            result["health_score"] = round(sum(available) / len(available)) if available else None
+            health = calculate_health_score(result["scores"])
+            result["health_score"] = health.health_score
+            result["health_breakdown"] = health.breakdown
+            result["health_coverage"] = f"{health.available_dimensions}/{health.total_dimensions} dimensiones"
 
             # ── Fase 5: Claude API → recomendaciones ─────────────────────
             recs_note: str | None = None
