@@ -1,4 +1,4 @@
-# Brief para Claude Design — Growth Radar
+# Brief para Claude Design — EDA
 
 > Copia el contenido de la sección "PROMPT" y pégalo en claude.ai/design como "High fidelity"
 
@@ -6,14 +6,16 @@
 
 ## PROMPT
 
-Diseña un prototipo de alta fidelidad para **Growth Radar**, una plataforma SaaS B2B que audita la presencia digital de pequeñas y medianas empresas en América Latina. El producto genera un reporte automático con scores reales de performance, SEO y recomendaciones accionables en lenguaje natural.
+Diseña un prototipo de alta fidelidad para **EDA**, una plataforma SaaS B2B que audita la presencia digital de pequeñas y medianas empresas en América Latina. El nombre es un acrónimo que representa los 3 pilares del producto: **Evalúa. Descubre. Alcanza.** El producto genera un reporte automático con scores reales de performance, SEO y recomendaciones accionables en lenguaje natural.
 
 ---
 
 ### Identidad visual
 
-**Nombre:** Growth Radar
-**Tagline:** "Conoce el estado digital de tu negocio en minutos"
+**Nombre:** EDA
+**Dominio:** useeda.com
+**Tagline:** "Evalúa. Descubre. Alcanza."
+**Subtítulo:** "Conoce el estado digital de tu negocio en minutos"
 **Audiencia:** Dueños de pymes LATAM (no técnicos) y agencias digitales
 
 **Paleta de colores:**
@@ -36,7 +38,7 @@ Diseña un prototipo de alta fidelidad para **Growth Radar**, una plataforma Saa
 ### Pantallas a diseñar
 
 #### 1. Dashboard principal
-Lista de empresas registradas por el usuario. Cada empresa muestra su último health score con color según rango. Botón "Nueva auditoría" prominente. Header con logo Growth Radar y avatar de usuario.
+Lista de empresas registradas por el usuario. Cada empresa muestra su último health score con color según rango. Botón "Nueva auditoría" prominente. Header con logo **EDA** y avatar de usuario.
 
 Empresa de ejemplo:
 - **DIAN** · dian.gov.co · Health Score: **65/100** (color ámbar) · Última auditoría: hace 3 días
@@ -44,8 +46,8 @@ Empresa de ejemplo:
 #### 2. Trigger de auditoría + Loading state
 Pantalla intermedia que aparece al disparar una auditoría. Muestra:
 - El dominio que se está analizando
-- Indicador de progreso animado (no una barra simple — algo más visual, como un "radar" girando o pulsos)
-- Pasos en vivo: "✓ Analizando performance (CrUX)..." → "✓ Auditando SEO..." → "⟳ Generando recomendaciones con IA..."
+- Indicador de progreso animado — algo visual que evoque los 3 pilares de EDA: pulsos o anillos que se expanden
+- Pasos en vivo: "✓ Evaluando performance (CrUX)..." → "✓ Auditando SEO..." → "⟳ Generando recomendaciones con IA..."
 - Tiempo estimado: "~45 segundos"
 
 #### 3. Reporte de auditoría — vista principal (la pantalla más importante)
@@ -122,3 +124,4 @@ Lista cronológica de auditorías de una empresa. Cada fila: fecha, health score
 - Los textos en español LATAM (Colombia/México como mercados primarios)
 - No usar jerga técnica en la UI sin explicación
 - El reporte debe sentirse como un "diagnóstico médico digital" — confiable, claro, accionable
+- El nombre EDA aparece siempre en mayúsculas
