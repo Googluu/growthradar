@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Syne, DM_Sans } from "next/font/google";
+import { ThemeProvider } from "@/lib/theme";
 import "./globals.css";
 
 const syne = Syne({
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
   title: "EDA — Evalúa. Descubre. Alcanza.",
   description:
     "Audita tu presencia digital en segundos. Detecta qué está fallando, descubre oportunidades en tu mercado y alcanza más clientes — impulsado por IA.",
-  keywords: ["auditoría digital", "SEO", "presencia digital", "PYME", "LATAM", "Core Web Vitals"],
+  keywords: ["auditoría digital", "SEO", "Core Web Vitals", "presencia digital", "PYME", "LATAM"],
   openGraph: {
     title: "EDA — Evalúa. Descubre. Alcanza.",
     description: "¿Tu negocio existe en internet o solo crees que sí?",
@@ -30,18 +31,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="es"
-      data-theme="dark"
-      className={`${syne.variable} ${dmSans.variable}`}
-    >
-      <body>{children}</body>
+    <html lang="es" data-theme="dark" className={`${syne.variable} ${dmSans.variable}`}>
+      <body>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

@@ -87,3 +87,20 @@ input::placeholder { color: var(--txt-faint); }
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── LOGO FILTERS (CSS-only, no JS theme prop needed) ── */
+
+/* Plant icon: RGBA transparent → show natural green/black colors always */
+.logo-icon { filter: none; }
+
+/* EDA wordmark: black text on transparent — invert to white in dark mode */
+[data-theme="dark"]  .logo-wordmark { filter: brightness(0) invert(1); }
+[data-theme="light"] .logo-wordmark { filter: none; }
+
+/* Large decorative logo behind hero content */
+[data-theme="dark"]  .logo-decorative { opacity: 0.08; filter: none; }
+[data-theme="light"] .logo-decorative { opacity: 0.05; filter: brightness(0); }
+
+/* Large background logo in footer CTA */
+[data-theme="dark"]  .logo-bg { opacity: 0.03; filter: none; }
+[data-theme="light"] .logo-bg { opacity: 0.04; filter: brightness(0); }
