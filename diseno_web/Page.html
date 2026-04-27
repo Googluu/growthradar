@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EDA — Auditoría Digital para PYMEs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { font-family: 'DM Sans', sans-serif; overflow-x: hidden; }
+
+    /* Fade-up animation */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(32px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes floatIcon {
+      0%, 100% { transform: translateY(0px) rotate(-3deg); }
+      50%       { transform: translateY(-18px) rotate(3deg); }
+    }
+    @keyframes radarPulse {
+      0%   { transform: scale(0.4); opacity: 0.9; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+    @keyframes scanLine {
+      0%   { top: 0%; }
+      100% { top: 100%; }
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+    .fade-up { animation: fadeUp 0.7s ease forwards; }
+    .float-icon { animation: floatIcon 6s ease-in-out infinite; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2A352A; border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "darkMode": true,
+  "showScanOverlay": true,
+  "accentColor": "#5DB848"
+}/*EDITMODE-END*/;
+
+// ─── Theme tokens ────────────────────────────────────────────────────────────
+const themes = {
+  dark: {
+    bg:        '#0A0F0A',
+    bg2:       '#111811',
+    bg3:       '#1A211A',
+    border:    '#2A352A',
+    borderSoft:'#1F281F',
+    txt:       '#F0F5F0',
+    txtMuted:  '#7A9A7A',
+    txtFaint:  '#445544',
+    accent:    '#5DB848',
+    accentGlow:'rgba(93,184,72,0.25)',
+    accent2:   '#A3C94A',
+    accent3:   '#F5C842',
+  },
+  light: {
+    bg:        '#F7FAF7',
+    bg2:       '#EDFAED',
+    bg3:       '#DFF0DF',
+    border:    '#C5DFC5',
+    borderSoft:'#D5EAD5',
+    txt:       '#0A1A0A',
+    txtMuted:  '#3A6A3A',
+    txtFaint:  '#7AAA7A',
+    accent:    '#3D9A2A',
+    accentGlow:'rgba(61,154,42,0.2)',
+    accent2:   '#7AAA1A',
+    accent3:   '#D4A017',
+  }
+};
+
+// ─── useCountUp ──────────────────────────────────────────────────────────────
+function useCountUp(target, duration = 1200, start = false) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (!start) return;
+    let startTime = null;
+    const step = (ts) => {
+      if (!startTime) startTime = ts;
+      const p = Math.min((ts - startTime) / duration, 1);
+      const ease = 1 - Math.pow(1 - p, 3);
+      setVal(Math.round(ease * target));
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }, [target, duration, start]);
+  return val;
+}
+
+// ─── useInView ───────────────────────────────────────────────────────────────
+function useInView(threshold = 0.15) {
+  const ref = useRef(null);
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setInView(true); }, { threshold });
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, []);
+  return [ref, inView];
+}
+
+// ─── ScoreCard ───────────────────────────────────────────────────────────────
+function ScoreCard({ label, score, maxScore, colorVar, badge, active, onClick, t, started }) {
+  const animated = useCountUp(score || 0, 1200, started);
+  const pct = maxScore ? (animated / maxScore) * 100 : 0;
+  return (
+    <div onClick={onClick} style={{
+      background: active ? t.bg3 : t.bg2,
+      border: `1px solid ${active ? colorVar : t.border}`,
+      borderRadius: 12,
+      padding: '18px 20px',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      boxShadow: active ? `0 0 0 1px ${colorVar}44` : 'none',
+    }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+        <span style={{ fontFamily:'DM Sans', fontWeight:600, color: t.txt, fontSize:15 }}>{label}</span>
+        <span style={{
+          background: colorVar + '22',
+          color: colorVar,
+          border: `1px solid ${colorVar}44`,
+          borderRadius: 20,
+          padding: '2px 10px',
+          fontSize: 12,
+          fontWeight: 600,
+        }}>{badge}</span>
+      </div>
+      {maxScore ? (
+        <>
+          <div style={{ display:'flex', alignItems:'baseline', gap:4, marginBottom:8 }}>
+            <span style={{ fontFamily:'Syne', fontWeight:800, fontSize:32, color: colorVar }}>{animated}</span>
+            <span style={{ color: t.txtMuted, fontSize:14 }}>/ {maxScore}</span>
+          </div>
+          <div style={{ height:6, borderRadius:3, background: t.bg3, overflow:'hidden' }}>
+            <div style={{ height:'100%', borderRadius:3, background: colorVar, width:`${pct}%`, transition:'width 1.2s cubic-bezier(0.16,1,0.3,1)' }} />
+          </div>
+        </>
+      ) : (
+        <div style={{ fontFamily:'Syne', fontWeight:800, fontSize:32, color: t.txtFaint }}>N/A</div>
+      )}
+    </div>
+  );
+}
+
+// ─── MetricRow ───────────────────────────────────────────────────────────────
+function MetricRow({ label, value, status, t }) {
+  const colors = { GOOD: '#5DB848', 'NEEDS IMPROVEMENT': '#F5C842', POOR: '#E53935' };
+  const icons  = { GOOD: '●', 'NEEDS IMPROVEMENT': '▲', POOR: '●' };
+  return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:`1px solid ${t.border}` }}>
+      <span style={{ color: t.txtMuted, fontSize:13, fontFamily:'DM Sans' }}>{label}</span>
+      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+        <span style={{ fontFamily:'monospace', color: t.txt, fontSize:14, fontWeight:600 }}>{value}</span>
+        <span style={{ color: colors[status], fontSize:11, fontWeight:700, display:'flex', alignItems:'center', gap:3 }}>
+          {icons[status]} {status}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ─── ScanOverlay ─────────────────────────────────────────────────────────────
+function ScanOverlay({ onDone, url, t }) {
+  const [phase, setPhase] = useState('scanning'); // scanning | done
+  const [progress, setProgress] = useState(0);
+  const [currentCheck, setCurrentCheck] = useState('Iniciando auditoría...');
+  const checks = [
+    'Conectando con Google CrUX...',
+    'Analizando Core Web Vitals...',
+    'Auditando SEO técnico...',
+    'Mapeando presencia digital...',
+    'Consultando Claude AI...',
+    '¡Reporte listo!',
+  ];
+  useEffect(() => {
+    let i = 0;
+    const interval = setInterval(() => {
+      i++;
+      setProgress(Math.min(i * 18, 98));
+      setCurrentCheck(checks[Math.min(i - 1, checks.length - 1)]);
+      if (i >= checks.length) {
+        clearInterval(interval);
+        setProgress(100);
+        setTimeout(() => { setPhase('done'); setTimeout(onDone, 800); }, 600);
+      }
+    }, 420);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div style={{
+      position:'fixed', inset:0, zIndex:1000,
+      background:'rgba(10,15,10,0.95)',
+      display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+      backdropFilter:'blur(8px)',
+    }}>
+      {/* Radar rings */}
+      <div style={{ position:'relative', width:220, height:220, marginBottom:40 }}>
+        {[0,1,2,3].map(i => (
+          <div key={i} style={{
+            position:'absolute', inset:0,
+            borderRadius:'50%',
+            border:`1.5px solid ${t.accent}`,
+            animation:`radarPulse 2.4s ease-out ${i * 0.6}s infinite`,
+            opacity:0,
+          }} />
+        ))}
+        <img src="logo_eda_sin_background.png" alt="EDA" style={{
+          position:'absolute', inset:'50%', transform:'translate(-50%,-50%)',
+          width:100, height:100, objectFit:'contain',
+          filter: 'brightness(0) invert(1) sepia(1) saturate(3) hue-rotate(70deg)',
+          animation:'spin 8s linear infinite',
+        }} />
+        {/* Scan line */}
+        <div style={{
+          position:'absolute', left:0, right:0, height:2,
+          background:`linear-gradient(90deg, transparent, ${t.accent}, transparent)`,
+          animation:'scanLine 1.8s linear infinite',
+          borderRadius:1,
+        }} />
+      </div>
+      <div style={{ textAlign:'center' }}>
+        <div style={{ fontFamily:'Syne', fontWeight:800, fontSize:22, color:t.txt, marginBottom:8 }}>
+          Auditando {url || 'tu sitio'}
+        </div>
+        <div style={{ color:t.accent, fontFamily:'monospace', fontSize:13, marginBottom:24, minHeight:20 }}>
+          {currentCheck}
+        </div>
+        <div style={{ width:300, height:4, background:t.bg3, borderRadius:2, overflow:'hidden' }}>
+          <div style={{ height:'100%', background:t.accent, width:`${progress}%`, transition:'width 0.4s ease', borderRadius:2 }} />
+        </div>
+        <div style={{ color:t.txtMuted, fontSize:12, marginTop:8 }}>{progress}%</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const t = themes[tweaks.darkMode ? 'dark' : 'light'];
+
+  const [url, setUrl] = useState('');
+  const [scanning, setScanning] = useState(false);
+  const [scanned, setScanned] = useState(false);
+  const [activeCard, setActiveCard] = useState('performance');
+  const [activeTab, setActiveTab] = useState('metrics');
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState([
+    { role:'ai', text:'Analicé tu sitio. Tu LCP de 2.1s es bueno, pero el CLS de 0.10 está en el límite. Revisa imágenes sin dimensiones definidas — pueden estar causando desplazamientos al cargar.' }
+  ]);
+  const [navScrolled, setNavScrolled] = useState(false);
+
+  const [demoRef, demoInView] = useInView();
+  const [metricsRef, metricsInView] = useInView();
+
+  useEffect(() => {
+    const handler = () => setNavScrolled(window.scrollY > 40);
+    window.addEventListener('scroll', handler);
+    return () => window.removeEventListener('scroll', handler);
+  }, []);
+
+  const handleScan = () => {
+    if (!url.trim()) return;
+    setScanning(true);
+  };
+
+  const handleScanDone = () => {
+    setScanning(false);
+    setScanned(true);
+    document.getElementById('demo-section')?.scrollIntoView({ behavior:'smooth', block:'start' });
+  };
+
+  const handleChat = () => {
+    if (!chatInput.trim()) return;
+    const q = chatInput;
+    setChatInput('');
+    setChatMessages(m => [...m, { role:'user', text:q }]);
+    setTimeout(() => {
+      setChatMessages(m => [...m, { role:'ai', text:'Buena pregunta. Basado en los datos del sitio, te recomendaría revisar ese aspecto específico en la sección de auditoría técnica. ¿Quieres que profundice en algún punto?' }]);
+    }, 1200);
+  };
+
+  // ── styles shorthand ──
+  const s = {
+    section: (extra = {}) => ({ background: t.bg, ...extra }),
+    container: { maxWidth:1120, margin:'0 auto', padding:'0 24px' },
+  };
+
+  const accentForCard = { performance: t.accent, seo: t.accent3, presencia: t.txtFaint };
+
+  return (
+    <div style={{ background: t.bg, color: t.txt, minHeight:'100vh', transition:'background 0.3s, color 0.3s' }}>
+
+      {/* ─── SCAN OVERLAY ─── */}
+      {scanning && <ScanOverlay onDone={handleScanDone} url={url} t={t} />}
+
+      {/* ─── NAV ─── */}
+      <nav style={{
+        position:'fixed', top:0, left:0, right:0, zIndex:100,
+        background: navScrolled ? (tweaks.darkMode ? 'rgba(10,15,10,0.92)' : 'rgba(247,250,247,0.92)') : 'transparent',
+        backdropFilter: navScrolled ? 'blur(12px)' : 'none',
+        borderBottom: navScrolled ? `1px solid ${t.borderSoft}` : '1px solid transparent',
+        transition: 'all 0.3s',
+        padding: '0 24px',
+      }}>
+        <div style={{ maxWidth:1120, margin:'0 auto', display:'flex', alignItems:'center', justifyContent:'space-between', height:64 }}>
+          {/* Logo */}
+          <a href="#" style={{ display:'flex', alignItems:'center', gap:10, textDecoration:'none' }}>
+            <img src="logo_eda_sin_background.png" alt="EDA icon" style={{
+              height:28, width:28, objectFit:'contain',
+              filter: tweaks.darkMode ? 'none' : 'brightness(0)',
+            }} />
+            <img src="eda.png" alt="EDA" style={{
+              height:22, objectFit:'contain',
+              filter: tweaks.darkMode ? 'brightness(0) invert(1)' : 'brightness(0)',
+            }} />
+          </a>
+          {/* Nav links */}
+          <div style={{ display:'flex', alignItems:'center', gap:32 }}>
+            {['Cómo funciona','Reporte','Demo'].map(l => (
+              <a key={l} href={`#${l.toLowerCase().replace(' ','-')}`} style={{
+                color: t.txtMuted, fontSize:14, fontWeight:500, textDecoration:'none',
+                transition:'color 0.15s',
+              }}
+              onMouseEnter={e => e.target.style.color = t.txt}
+              onMouseLeave={e => e.target.style.color = t.txtMuted}
+              >{l}</a>
+            ))}
+          </div>
+          {/* CTAs */}
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <button style={{
+              background:'transparent', border:`1px solid ${t.border}`, color:t.txt,
+              padding:'8px 16px', borderRadius:8, fontSize:14, fontWeight:500, cursor:'pointer',
+              transition:'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = t.bg3; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >Iniciar sesión</button>
+            <button style={{
+              background: t.accent, color:'#fff',
+              border:'none', padding:'8px 18px', borderRadius:8, fontSize:14, fontWeight:600, cursor:'pointer',
+              transition:'all 0.15s',
+              boxShadow:`0 0 16px ${t.accentGlow}`,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.filter = 'brightness(1.1)'; }}
+            onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)'; }}
+            onClick={() => document.getElementById('hero-input')?.focus()}
+            >Auditar gratis →</button>
+          </div>
+        </div>
+      </nav>
+
+      {/* ─── HERO ─── */}
+      <section style={{
+        minHeight:'100vh', display:'flex', alignItems:'center', position:'relative', overflow:'hidden',
+        background: t.bg,
+        paddingTop: 64,
+      }}>
+        {/* Dot grid */}
+        <div style={{
+          position:'absolute', inset:0, pointerEvents:'none',
+          backgroundImage:`radial-gradient(circle, ${t.txtFaint} 1px, transparent 1px)`,
+          backgroundSize:'32px 32px',
+          opacity: tweaks.darkMode ? 0.35 : 0.2,
+        }} />
+        {/* Gradient fade */}
+        <div style={{
+          position:'absolute', inset:0, pointerEvents:'none',
+          background:`radial-gradient(ellipse 60% 60% at 50% 40%, ${t.accentGlow} 0%, transparent 70%)`,
+        }} />
+
+        {/* Decorative hero icon */}
+        <img
+          src="logo_eda_sin_background.png"
+          alt=""
+          className="float-icon"
+          style={{
+            position:'absolute', right:'-2%', top:'50%', transform:'translateY(-50%)',
+            width:340, height:340, objectFit:'contain',
+            opacity: tweaks.darkMode ? 0.08 : 0.06,
+            pointerEvents:'none',
+            filter: tweaks.darkMode ? 'none' : 'brightness(0)',
+          }}
+        />
+
+        <div style={{ ...s.container, width:'100%', position:'relative', zIndex:1 }}>
+          <div style={{ maxWidth:680, animation:'fadeUp 0.8s ease forwards' }}>
+            {/* Badge */}
+            <div style={{
+              display:'inline-flex', alignItems:'center', gap:8,
+              background: t.bg2, border:`1px solid ${t.border}`,
+              borderRadius:20, padding:'6px 14px', marginBottom:32,
+              fontSize:13, color:t.txtMuted, fontWeight:500,
+            }}>
+              <span style={{ color:t.accent, fontSize:10 }}>●</span>
+              Beta · Primeros 500 usuarios con auditorías gratis
+            </div>
+
+            {/* Headline */}
+            <h1 style={{
+              fontFamily:'Syne', fontWeight:800, fontSize:'clamp(36px,5.5vw,72px)',
+              letterSpacing:'-2px', lineHeight:1.05, color:t.txt,
+              marginBottom:24,
+            }}>
+              ¿Tu negocio existe<br />en internet o solo<br />
+              <span style={{
+                background:`linear-gradient(135deg, ${t.accent}, ${t.accent2})`,
+                WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent',
+              }}>crees que sí?</span>
+            </h1>
+
+            {/* Sub */}
+            <p style={{
+              fontSize:'clamp(15px,1.4vw,18px)', color:t.txtMuted, fontWeight:400,
+              lineHeight:1.65, marginBottom:40, maxWidth:560,
+            }}>
+              EDA audita tu presencia digital en segundos. Detecta qué está fallando, descubre oportunidades en tu mercado y alcanza más clientes — impulsado por IA.
+            </p>
+
+            {/* URL Input */}
+            <div style={{
+              display:'flex', alignItems:'stretch',
+              background: t.bg2, border:`1px solid ${t.border}`,
+              borderRadius:12, overflow:'hidden', marginBottom:20,
+              maxWidth:560,
+              boxShadow:`0 0 32px ${t.accentGlow}`,
+              transition:'box-shadow 0.2s',
+            }}>
+              <span style={{
+                padding:'0 14px', display:'flex', alignItems:'center',
+                color:t.txtFaint, fontFamily:'monospace', fontSize:14,
+                borderRight:`1px solid ${t.border}`,
+                background: t.bg3, whiteSpace:'nowrap',
+              }}>https://</span>
+              <input
+                id="hero-input"
+                value={url}
+                onChange={e => setUrl(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleScan()}
+                placeholder="tunegocio.com"
+                style={{
+                  flex:1, background:'transparent', border:'none', outline:'none',
+                  padding:'14px 16px', color:t.txt, fontFamily:'DM Sans', fontSize:15,
+                  placeholder: t.txtFaint,
+                }}
+              />
+              <button
+                onClick={handleScan}
+                style={{
+                  background: t.accent, color:'#fff', border:'none',
+                  padding:'0 24px', fontSize:15, fontWeight:600, cursor:'pointer',
+                  transition:'filter 0.15s', whiteSpace:'nowrap',
+                }}
+                onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.1)'}
+                onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1)'}
+              >Auditar →</button>
+            </div>
+
+            {/* Trust row */}
+            <div style={{ display:'flex', alignItems:'center', gap:20, flexWrap:'wrap' }}>
+              {['Sin registrarse','Resultado en 30 seg','Sin tarjeta de crédito'].map((item, i) => (
+                <span key={i} style={{ color:t.txtFaint, fontSize:13, display:'flex', alignItems:'center', gap:6 }}>
+                  <span style={{ color:t.accent, fontSize:10 }}>✓</span> {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── POWERED BY ─── */}
+      <div style={{
+        background: t.bg2,
+        borderTop:`1px solid ${t.borderSoft}`,
+        borderBottom:`1px solid ${t.borderSoft}`,
+        padding:'18px 24px',
+      }}>
+        <div style={{ maxWidth:1120, margin:'0 auto', display:'flex', alignItems:'center', gap:24, flexWrap:'wrap', justifyContent:'center' }}>
+          <span style={{ color:t.txtFaint, fontSize:13, fontWeight:500, marginRight:8 }}>Tecnología de:</span>
+          {['Google CrUX','DataForSEO','Anthropic Claude','Core Web Vitals'].map((tech, i) => (
+            <React.Fragment key={tech}>
+              {i > 0 && <span style={{ color:t.txtFaint, opacity:0.4 }}>·</span>}
+              <span style={{ color:t.txtMuted, fontSize:13, fontWeight:500, letterSpacing:'0.02em' }}>{tech}</span>
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* ─── DEMO DEL REPORTE ─── */}
+      <section id="demo-section" ref={demoRef} style={{ background: t.bg, padding:'96px 24px' }}>
+        <div style={{ maxWidth:1120, margin:'0 auto' }}>
+          <div style={{ marginBottom:48, opacity: demoInView ? 1 : 0, transform: demoInView ? 'translateY(0)' : 'translateY(24px)', transition:'all 0.7s ease' }}>
+            <div style={{ display:'inline-block', background:t.bg2, border:`1px solid ${t.border}`, borderRadius:20, padding:'4px 12px', fontSize:12, fontWeight:600, color:t.accent, marginBottom:16, letterSpacing:'0.08em', textTransform:'uppercase' }}>Vista Previa</div>
+            <h2 style={{ fontFamily:'Syne', fontWeight:800, fontSize:'clamp(28px,3.5vw,48px)', letterSpacing:'-1.5px', color:t.txt }}>Así luce un reporte EDA</h2>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'320px 1fr', gap:24, opacity: demoInView ? 1 : 0, transition:'opacity 0.7s 0.2s ease' }}>
+            {/* Score cards */}
+            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+              <ScoreCard label="Performance" score={80} maxScore={100} colorVar={t.accent} badge="Buena base" active={activeCard==='performance'} onClick={() => setActiveCard('performance')} t={t} started={demoInView} />
+              <ScoreCard label="SEO" score={50} maxScore={100} colorVar={t.accent3} badge="Necesita mejoras" active={activeCard==='seo'} onClick={() => setActiveCard('seo')} t={t} started={demoInView} />
+              <ScoreCard label="Presencia" score={0} maxScore={null} colorVar={t.txtFaint} badge="Próximamente" active={activeCard==='presencia'} onClick={() => setActiveCard('presencia')} t={t} started={demoInView} />
+            </div>
+
+            {/* Detail panel */}
+            <div style={{ background:t.bg2, border:`1px solid ${t.border}`, borderRadius:16, overflow:'hidden', minHeight:380 }}>
+              {/* Tabs */}
+              <div style={{ display:'flex', borderBottom:`1px solid ${t.border}` }}>
+                {[['metrics','📊 Métricas'],['ai','🤖 EDA AI']].map(([key, label]) => (
+                  <button key={key} onClick={() => setActiveTab(key)} style={{
+                    flex:1, padding:'14px', background:'transparent', border:'none',
+                    borderBottom: activeTab===key ? `2px solid ${t.accent}` : '2px solid transparent',
+                    color: activeTab===key ? t.txt : t.txtMuted,
+                    fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'DM Sans',
+                    transition:'all 0.15s',
+                  }}>{label}</button>
+                ))}
+              </div>
+
+              <div style={{ padding:24 }}>
+                {activeTab === 'metrics' && (
+                  <div>
+                    <div style={{ marginBottom:8, color:t.txtFaint, fontSize:12, fontWeight:600, letterSpacing:'0.08em', textTransform:'uppercase' }}>dian.gov.co · Core Web Vitals</div>
+                    <MetricRow label="LCP" value="2.1s" status="GOOD" t={t} />
+                    <MetricRow label="FCP" value="1.8s" status="GOOD" t={t} />
+                    <MetricRow label="CLS" value="0.10" status="NEEDS IMPROVEMENT" t={t} />
+                    <MetricRow label="TTFB" value="450ms" status="GOOD" t={t} />
+                    <div style={{ marginTop:20, display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+                      {[['Domain Authority','Media'],['HTTPS','✓ Activo'],['Sitemap','✓ Detectado']].map(([k,v]) => (
+                        <div key={k} style={{ background:t.bg3, borderRadius:8, padding:'12px 14px' }}>
+                          <div style={{ color:t.txtFaint, fontSize:11, marginBottom:4, fontWeight:600 }}>{k}</div>
+                          <div style={{ color:t.txt, fontSize:14, fontWeight:600 }}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'ai' && (
+                  <div style={{ display:'flex', flexDirection:'column', height:320 }}>
+                    <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:12, marginBottom:16 }}>
+                      {chatMessages.map((msg, i) => (
+                        <div key={i} style={{
+                          alignSelf: msg.role==='ai' ? 'flex-start' : 'flex-end',
+                          maxWidth:'80%',
+                          background: msg.role==='ai' ? t.bg3 : t.accent + '22',
+                          border: `1px solid ${msg.role==='ai' ? t.border : t.accent + '44'}`,
+                          borderRadius: msg.role==='ai' ? '4px 12px 12px 12px' : '12px 4px 12px 12px',
+                          padding:'10px 14px',
+                          fontSize:13,
+                          color:t.txt,
+                          lineHeight:1.6,
+                        }}>
+                          {msg.role==='ai' && <span style={{ display:'block', color:t.accent, fontSize:11, fontWeight:700, marginBottom:4 }}>EDA AI</span>}
+                          {msg.text}
+                        </div>
+                      ))}
+                    </div>
+                    {/* Suggestions */}
+                    <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10 }}>
+                      {['¿Cómo mejorar el CLS?','¿Qué es el LCP?','Ver competidores'].map(q => (
+                        <button key={q} onClick={() => { setChatInput(q); }} style={{
+                          background:'transparent', border:`1px solid ${t.border}`,
+                          color:t.txtMuted, borderRadius:20, padding:'4px 10px', fontSize:11,
+                          cursor:'pointer', fontFamily:'DM Sans',
+                          transition:'all 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = t.accent; e.currentTarget.style.color = t.accent; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = t.border; e.currentTarget.style.color = t.txtMuted; }}
+                        >{q}</button>
+                      ))}
+                    </div>
+                    <div style={{ display:'flex', gap:8 }}>
+                      <input
+                        value={chatInput}
+                        onChange={e => setChatInput(e.target.value)}
+                        onKeyDown={e => e.key==='Enter' && handleChat()}
+                        placeholder="Pregunta algo sobre tu sitio..."
+                        style={{
+                          flex:1, background:t.bg3, border:`1px solid ${t.border}`,
+                          borderRadius:8, padding:'8px 12px', color:t.txt,
+                          fontFamily:'DM Sans', fontSize:13, outline:'none',
+                        }}
+                      />
+                      <button onClick={handleChat} style={{
+                        background:t.accent, color:'#fff', border:'none', borderRadius:8,
+                        padding:'8px 14px', fontSize:13, fontWeight:600, cursor:'pointer',
+                      }}>→</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── CÓMO FUNCIONA ─── */}
+      <section id="cómo-funciona" style={{ background:t.bg2, padding:'96px 24px', borderTop:`1px solid ${t.borderSoft}` }}>
+        <div style={{ maxWidth:1120, margin:'0 auto' }}>
+          <div style={{ textAlign:'center', marginBottom:64 }}>
+            <h2 style={{ fontFamily:'Syne', fontWeight:800, fontSize:'clamp(28px,3.5vw,48px)', letterSpacing:'-1.5px', color:t.txt }}>Tres pasos. Resultados reales.</h2>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:0 }}>
+            {[
+              { num:'01', label:'EVALÚA', color: t.accent, title:'Auditoría automática', desc:'Performance + SEO + Presencia en segundos. Sin configuración, sin esperas.' },
+              { num:'02', label:'DESCUBRE', color: t.accent2, title:'Inteligencia competitiva', desc:'Mapea tu mercado y encuentra oportunidades que tu competencia no está aprovechando.' },
+              { num:'03', label:'ALCANZA', color: t.accent3, title:'Outreach con IA', desc:'Convierte oportunidades en clientes con mensajes personalizados generados por IA.' },
+            ].map((item, i) => (
+              <div key={i} style={{
+                padding:'40px 36px',
+                borderRight: i < 2 ? `1px solid ${t.border}` : 'none',
+                position:'relative',
+              }}>
+                <div style={{ display:'flex', alignItems:'baseline', gap:12, marginBottom:20 }}>
+                  <span style={{ fontFamily:'Syne', fontWeight:800, fontSize:13, color: item.color, letterSpacing:'0.12em' }}>{item.num} ·</span>
+                  <span style={{ fontFamily:'Syne', fontWeight:800, fontSize:13, color: item.color, letterSpacing:'0.12em' }}>{item.label}</span>
+                </div>
+                <h3 style={{ fontFamily:'Syne', fontWeight:800, fontSize:22, color:t.txt, marginBottom:12, letterSpacing:'-0.5px' }}>{item.title}</h3>
+                <p style={{ color:t.txtMuted, lineHeight:1.65, fontSize:15 }}>{item.desc}</p>
+                {/* Accent line */}
+                <div style={{ position:'absolute', bottom:0, left:36, width:40, height:2, background:item.color, borderRadius:1 }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── MÉTRICAS DE IMPACTO ─── */}
+      <section ref={metricsRef} style={{ background:t.bg, padding:'96px 24px', borderTop:`1px solid ${t.borderSoft}` }}>
+        <div style={{ maxWidth:1120, margin:'0 auto' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:0 }}>
+            {[
+              { value:'40+', label:'Factores SEO analizados', color:t.accent },
+              { value:'<30s', label:'Tiempo de resultado', color:t.accent2 },
+              { value:'CWV', label:'Core Web Vitals nativos', color:t.accent3 },
+              { value:'AI', label:'Impulsado por Claude', color:t.accent },
+            ].map((item, i) => (
+              <div key={i} style={{
+                textAlign:'center', padding:'40px 20px',
+                borderRight: i < 3 ? `1px solid ${t.border}` : 'none',
+                opacity: metricsInView ? 1 : 0,
+                transform: metricsInView ? 'translateY(0)' : 'translateY(20px)',
+                transition: `all 0.6s ${i * 0.12}s ease`,
+              }}>
+                <div style={{ fontFamily:'Syne', fontWeight:800, fontSize:'clamp(32px,4vw,56px)', letterSpacing:'-2px', color:item.color, marginBottom:8 }}>{item.value}</div>
+                <div style={{ color:t.txtMuted, fontSize:14 }}>{item.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ─── FOOTER CTA ─── */}
+      <section style={{
+        background:`linear-gradient(135deg, ${t.bg2} 0%, ${t.bg} 100%)`,
+        padding:'120px 24px',
+        borderTop:`1px solid ${t.borderSoft}`,
+        textAlign:'center',
+        position:'relative', overflow:'hidden',
+      }}>
+        {/* Background icon */}
+        <img src="logo_eda_sin_background.png" alt="" style={{
+          position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)',
+          width:480, height:480, objectFit:'contain',
+          opacity: tweaks.darkMode ? 0.03 : 0.04, pointerEvents:'none',
+          filter: tweaks.darkMode ? 'none' : 'brightness(0)',
+        }} />
+        <div style={{ position:'relative', zIndex:1 }}>
+          <h2 style={{ fontFamily:'Syne', fontWeight:800, fontSize:'clamp(32px,5vw,64px)', letterSpacing:'-2px', color:t.txt, marginBottom:16 }}>
+            Audita tu sitio.<br />
+            <span style={{ color:t.accent }}>Es gratis.</span>
+          </h2>
+          <p style={{ color:t.txtMuted, fontSize:16, marginBottom:40 }}>Sin tarjeta de crédito. Resultado en 30 segundos.</p>
+          <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' }}>
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior:'smooth' })}
+              style={{
+                background: t.accent, color:'#fff', border:'none',
+                padding:'16px 36px', borderRadius:10, fontSize:16, fontWeight:700,
+                cursor:'pointer', fontFamily:'DM Sans',
+                boxShadow:`0 4px 32px ${t.accentGlow}`,
+                transition:'all 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+            >Auditar mi sitio →</button>
+            <button style={{
+              background:'transparent', border:`1px solid ${t.border}`, color:t.txt,
+              padding:'16px 36px', borderRadius:10, fontSize:16, fontWeight:600,
+              cursor:'pointer', fontFamily:'DM Sans', transition:'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = t.bg3; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >Ver demo</button>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── FOOTER BAR ─── */}
+      <footer style={{ background:t.bg, borderTop:`1px solid ${t.borderSoft}`, padding:'24px', }}>
+        <div style={{ maxWidth:1120, margin:'0 auto', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:16 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <img src="logo_eda_sin_background.png" alt="EDA" style={{ height:22, objectFit:'contain', filter: tweaks.darkMode ? 'none' : 'brightness(0)' }} />
+            <img src="eda.png" alt="EDA" style={{ height:16, objectFit:'contain', filter: tweaks.darkMode ? 'brightness(0) invert(1)' : 'brightness(0)' }} />
+          </div>
+          <span style={{ color:t.txtFaint, fontSize:13 }}>© 2025 EDA · Evalúa. Descubre. Alcanza.</span>
+          <div style={{ display:'flex', gap:20 }}>
+            {['Privacidad','Términos','Contacto'].map(l => (
+              <a key={l} href="#" style={{ color:t.txtFaint, fontSize:13, textDecoration:'none', transition:'color 0.15s' }}
+              onMouseEnter={e => e.target.style.color = t.txtMuted}
+              onMouseLeave={e => e.target.style.color = t.txtFaint}
+              >{l}</a>
+            ))}
+          </div>
+        </div>
+      </footer>
+
+      {/* ─── TWEAKS PANEL ─── */}
+      <TweaksPanel>
+        <TweakSection label="Apariencia">
+          <TweakToggle id="darkMode" label="Modo oscuro" />
+          <TweakColor id="accentColor" label="Color acento" />
+        </TweakSection>
+        <TweakSection label="Funciones">
+          <TweakToggle id="showScanOverlay" label="Overlay de escaneo" />
+        </TweakSection>
+      </TweaksPanel>
+
+      <style>{`
+        @keyframes radarPulse {
+          0%   { transform: scale(0.4); opacity: 0.9; }
+          100% { transform: scale(2.2); opacity: 0; }
+        }
+        @keyframes scanLine {
+          0%   { top: 0%; }
+          100% { top: 100%; }
+        }
+        @keyframes spin {
+          from { transform: translate(-50%,-50%) rotate(0deg); }
+          to   { transform: translate(-50%,-50%) rotate(360deg); }
+        }
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(32px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes floatIcon {
+          0%, 100% { transform: translateY(-50%) rotate(-3deg); }
+          50%       { transform: translateY(calc(-50% - 18px)) rotate(3deg); }
+        }
+        input::placeholder { color: #445544; }
+      `}</style>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
