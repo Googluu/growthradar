@@ -38,6 +38,7 @@ export function Hero({ url, onUrlChange, onScan }: Props) {
         aria-hidden
         className="logo-decorative float-icon absolute pointer-events-none object-contain"
         style={{ right: "-2%", top: "50%" }}
+        loading="eager"
       />
 
       <div className="max-w-[1120px] mx-auto px-6 w-full relative z-10">

@@ -24,6 +24,7 @@ export function FooterCTA({ onAuditClick, onDemoClick }: Props) {
         aria-hidden
         className="logo-bg absolute object-contain pointer-events-none"
         style={{ left: "50%", top: "50%", transform: "translate(-50%,-50%)" }}
+        loading="eager"
       />
 
       <div className="relative z-10">

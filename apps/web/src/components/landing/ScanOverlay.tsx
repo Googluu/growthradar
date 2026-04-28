@@ -66,6 +66,7 @@ export function ScanOverlay({ url, onDone }: Props) {
             animation: "spinSlow 8s linear infinite",
             filter: "brightness(0) invert(1) sepia(1) saturate(3) hue-rotate(70deg)",
           }}
+          loading="eager"
         />
         {/* Scan line */}
         <div

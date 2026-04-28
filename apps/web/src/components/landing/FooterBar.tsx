@@ -7,8 +7,8 @@ export function FooterBar() {
       <div className="max-w-[1120px] mx-auto flex items-center justify-between flex-wrap gap-4">
         {/* Logo */}
         <div className="flex items-center gap-2">
-          <Image src="/logo_eda_sin_background.png" alt="EDA" width={22} height={22} className="logo-icon object-contain" />
-          <Image src="/eda.png" alt="EDA" width={48} height={16} className="logo-wordmark object-contain" />
+          <Image src="/logo_eda_sin_background.png" alt="EDA" width={22} height={22} className="logo-icon object-contain" loading="eager"/>
+          <Image src="/eda.png" alt="EDA" width={48} height={16} className="logo-wordmark object-contain" loading="eager" />
         </div>
 
         <span className="text-[13px]" style={{ color: "var(--txt-faint)" }}>

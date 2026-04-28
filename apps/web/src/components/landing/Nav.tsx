@@ -24,8 +24,8 @@ export function Nav({ scrolled, onAuditClick }: Props) {
       <div className="max-w-[1120px] mx-auto px-6 flex items-center justify-between h-16">
         {/* Logo */}
         <a href="#" className="flex items-center gap-2.5 no-underline">
-          <Image src="/logo_eda_sin_background.png" alt="" width={28} height={28} className="logo-icon object-contain" />
-          <Image src="/eda.png" alt="EDA" width={60} height={22} className="logo-wordmark object-contain" />
+          <Image src="/logo_eda_sin_background.png" alt="" width={28} height={28} className="logo-icon object-contain" loading="eager" />
+          <Image src="/eda.png" alt="EDA" width={60} height={22} className="logo-wordmark object-contain" loading="eager" />
         </a>
 
         {/* Nav links */}
