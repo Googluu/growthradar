@@ -10,7 +10,7 @@ import { HowItWorks }     from "@/components/landing/HowItWorks";
 import { ImpactMetrics }  from "@/components/landing/ImpactMetrics";
 import { FooterCTA }      from "@/components/landing/FooterCTA";
 import { FooterBar }      from "@/components/landing/FooterBar";
-import type { AuditResult } from "@/types/audit";
+import type { AuditResult, CWVMetric, SEOCheck, Recommendation, MetricStatus } from "@/types/audit";
 
 // ── CTA helpers ───────────────────────────────────────────────────────────────
 function focusHeroInput() {
@@ -22,71 +22,138 @@ function scrollToDemo() {
   document.getElementById("demo-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ── Mock audit (reemplazar con POST /api/audit cuando Railway esté listo) ─────
-const DEMO_AUDIT: AuditResult = {
-  url: "dian.gov.co",
-  scores: { overall: 80, performance: 80, seo: 50 },
-  ai_summary:
-    "Tu sitio tiene una base técnica sólida — velocidad de carga en el top 20% para Colombia. " +
-    "Sin embargo, estás dejando dinero sobre la mesa: sin meta description, sin H1, " +
-    "y un CLS crítico que afecta la experiencia móvil. Con 44,868 keywords posicionadas " +
-    "y tráfico estimado de $6.1M USD, una optimización SEO básica podría triplicar tu " +
-    "visibilidad en 60 días.",
-  metrics: [
-    { label: "LCP",  value: "1.4s",  status: "good",              barPct: 88 },
-    { label: "FCP",  value: "1.2s",  status: "good",              barPct: 92 },
-    { label: "INP",  value: "62ms",  status: "good",              barPct: 94 },
-    { label: "TTFB", value: "439ms", status: "needs_improvement", barPct: 56 },
-    { label: "CLS",  value: "0.33",  status: "poor",              barPct: 22 },
-  ],
-  checks: [
-    { ok: true,  label: "HTTPS activo" },
-    { ok: false, label: "Sin meta description" },
-    { ok: false, label: "Sin etiqueta H1" },
-    { ok: false, label: "Sin sitemap.xml" },
-    { ok: false, label: "Sin robots.txt" },
-    { ok: true,  label: "Dominio con autoridad (DA alta)" },
-  ],
-  domain_stats: [
-    { val: "44,868", lbl: "Keywords" },
-    { val: "3,639",  lbl: "Posición #1" },
-    { val: "$6.1M",  lbl: "Tráfico ETV" },
-    { val: "Alto",   lbl: "Potencial" },
-  ],
-  recommendations: [
-    {
-      badge:   "QUICK WIN · ALTO IMPACTO",
-      title:   "Agrega meta description a todas las páginas",
-      problem: "El 100% de tus páginas carecen de meta description. Google genera snippets automáticos que reducen el CTR orgánico de forma significativa.",
-      action:  "Escribe una meta description única de 150–160 caracteres por página principal con tu keyword objetivo y una llamada a la acción clara.",
-      impact:  "+15–30% CTR en búsquedas",
-      effort:  "2–4 horas",
-      accent:  "#5DB848",
-    },
-    {
-      badge:   "QUICK WIN · ALTO IMPACTO",
-      title:   "Implementa etiquetas H1 en cada página",
-      problem: "Sin H1 visible, los motores de búsqueda no pueden determinar el tema principal de cada página y penalizan tu relevancia semántica.",
-      action:  "Agrega un H1 único y descriptivo por página que incluya la keyword principal. Solo debe haber un H1 por URL.",
-      impact:  "+20% relevancia semántica",
-      effort:  "1–2 horas",
-      accent:  "#A3C94A",
-    },
-    {
-      badge:   "ESTRATÉGICO · CRÍTICO",
-      title:   "Corrige el Cumulative Layout Shift (CLS: 0.33)",
-      problem: "Tu CLS está en zona POBRE (umbral: 0.1). Elementos visuales saltan mientras carga la página, lo que aumenta el rebote en móvil y afecta el ranking.",
-      action:  "Reserva dimensiones explícitas para imágenes, embeds y anuncios. Evita insertar contenido sobre texto existente durante la carga.",
-      impact:  "Mejora directa Core Web Vitals",
-      effort:  "1–2 días dev",
-      accent:  "#F5C842",
-    },
-  ],
-};
+// ── Backend result → AuditResult mapper ──────────────────────────────────────
+const CWV_MAP = [
+  { key: "largest_contentful_paint",          label: "LCP"  },
+  { key: "first_contentful_paint",            label: "FCP"  },
+  { key: "interaction_to_next_paint",         label: "INP"  },
+  { key: "experimental_time_to_first_byte",   label: "TTFB" },
+  { key: "cumulative_layout_shift",           label: "CLS"  },
+] as const;
 
-function fetchAudit(url: string): Promise<AuditResult> {
-  // Cuando Railway esté listo: return fetch("/api/audit", { method: "POST", body: JSON.stringify({ url }) }).then(r => r.json())
-  return new Promise((r) => setTimeout(() => r({ ...DEMO_AUDIT, url }), 2500));
+function fmtCwvValue(p75: number, unit: string): string {
+  if (unit === "score") return p75.toFixed(2);
+  return p75 >= 1000 ? `${(p75 / 1000).toFixed(1)}s` : `${Math.round(p75)}ms`;
+}
+
+function barPctFromRating(rating: string): number {
+  if (rating === "good")              return 82;
+  if (rating === "needs_improvement") return 48;
+  return 18;
+}
+
+function fmtNum(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return n.toLocaleString("es-CO");
+}
+
+function fmtEtv(n: number | null | undefined): string {
+  if (n == null) return "—";
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}K`;
+  return `$${n}`;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapBackendResult(raw: any, inputUrl: string): AuditResult {
+  // Core Web Vitals
+  const metrics: CWVMetric[] = [];
+  const cruxMetrics = raw.crux?.metrics ?? {};
+  for (const { key, label } of CWV_MAP) {
+    const m = cruxMetrics[key];
+    if (!m || m.p75 == null || m.rating === "no_data") continue;
+    metrics.push({
+      label,
+      value: fmtCwvValue(m.p75, m.unit),
+      status: m.rating as MetricStatus,
+      barPct: barPctFromRating(m.rating),
+    });
+  }
+
+  // SEO checks
+  const op = raw.seo?.onpage ?? {};
+  const checks: SEOCheck[] = [
+    { ok: !!op.is_https,             label: "HTTPS activo" },
+    { ok: !!op.has_meta_description, label: "Meta description" },
+    { ok: !!op.has_h1,               label: "Etiqueta H1" },
+    { ok: !!op.has_sitemap,          label: "sitemap.xml" },
+    { ok: !!op.has_robots_txt,       label: "robots.txt" },
+  ];
+
+  // Domain stats
+  const dr = raw.seo?.domain_rank;
+  const healthScore: number = raw.health_score ?? 50;
+  const potential = healthScore >= 70 ? "Alto" : healthScore >= 40 ? "Medio" : "Bajo";
+  const domain_stats = dr
+    ? [
+        { val: fmtNum(dr.count), lbl: "Keywords" },
+        { val: fmtNum(dr.pos_1), lbl: "Posición #1" },
+        { val: fmtEtv(dr.etv),   lbl: "Tráfico ETV" },
+        { val: potential,         lbl: "Potencial" },
+      ]
+    : [{ val: potential, lbl: "Potencial" }];
+
+  // Recommendations
+  const topRecs = raw.recommendations?.top_recommendations ?? [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recommendations: Recommendation[] = topRecs.map((r: any) => {
+    const typeLabel   = r.type === "quick_win" ? "QUICK WIN" : "ESTRATÉGICO";
+    const impactLabel = r.impact === "high" ? "ALTO IMPACTO" : r.impact === "medium" ? "IMPACTO MEDIO" : "BAJO IMPACTO";
+    const accent      = r.impact === "high" ? "#5DB848" : r.impact === "medium" ? "#A3C94A" : "#F5C842";
+    return {
+      badge:   `${typeLabel} · ${impactLabel}`,
+      title:   r.title,
+      problem: r.problem,
+      action:  r.action,
+      impact:  r.why_it_matters,
+      effort:  "",
+      accent,
+    };
+  });
+
+  return {
+    url: inputUrl,
+    scores: {
+      overall:     healthScore,
+      performance: raw.scores?.performance_score ?? 50,
+      seo:         raw.scores?.seo_score         ?? 50,
+    },
+    ai_summary: raw.recommendations?.executive_summary ?? "",
+    metrics,
+    checks,
+    domain_stats,
+    recommendations,
+  };
+}
+
+// ── API fetch with polling ─────────────────────────────────────────────────────
+const API_BASE = "http://localhost:8000";
+const POLL_INTERVAL_MS = 4_000;
+const POLL_TIMEOUT_MS  = 120_000;
+
+async function fetchAudit(url: string): Promise<AuditResult> {
+  const startRes = await fetch(`${API_BASE}/public/audit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!startRes.ok) throw new Error(`audit_trigger_failed:${startRes.status}`);
+  const { job_id } = await startRes.json();
+
+  const deadline = Date.now() + POLL_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    const pollRes = await fetch(`${API_BASE}/public/audit/${job_id}`);
+    if (!pollRes.ok) continue;
+    const job = await pollRes.json();
+    if (job.status === "completed" && job.result) {
+      return mapBackendResult(job.result, url);
+    }
+    if (job.status === "failed") {
+      throw new Error(job.error ?? "audit_failed");
+    }
+  }
+  throw new Error("audit_timeout");
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -96,7 +163,6 @@ export default function LandingPage() {
   const [scanning, setScanning]       = useState(false);
   const [reportData, setReportData]   = useState<AuditResult | null>(null);
 
-  // Guarda la Promise del fetch activo; handleScanDone la espera si no resolvió aún
   const pendingFetch = useRef<Promise<AuditResult> | null>(null);
 
   useEffect(() => {
@@ -111,12 +177,14 @@ export default function LandingPage() {
     pendingFetch.current = fetchAudit(url);
   }, [url]);
 
-  // Llamado por ScanOverlay cuando su animación termina (~4s).
-  // Si el backend todavía no respondió, mantiene el overlay abierto hasta que resuelva.
   const handleScanDone = useCallback(async () => {
     let result: AuditResult | null = null;
     if (pendingFetch.current) {
-      result = await pendingFetch.current;
+      try {
+        result = await pendingFetch.current;
+      } catch (err) {
+        console.error("[EDA] Audit error:", err);
+      }
       pendingFetch.current = null;
     }
     setScanning(false);
