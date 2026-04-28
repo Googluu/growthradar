@@ -22,7 +22,7 @@ function scrollToDemo() {
   document.getElementById("demo-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-// ── Mock audit (reemplazar con POST /api/audit cuando el backend esté listo) ──
+// ── Mock audit (reemplazar con POST /api/audit cuando Railway esté listo) ─────
 const DEMO_AUDIT: AuditResult = {
   url: "dian.gov.co",
   scores: { overall: 80, performance: 80, seo: 50 },
@@ -84,11 +84,9 @@ const DEMO_AUDIT: AuditResult = {
   ],
 };
 
-async function fetchAudit(url: string): Promise<AuditResult> {
-  // Simula latencia de backend; devuelve datos reales de dian.gov.co
-  // Cuando Railway esté listo: return fetch(`/api/audit`, { method: "POST", body: JSON.stringify({ url }) }).then(r => r.json())
-  await new Promise((r) => setTimeout(r, 2500));
-  return { ...DEMO_AUDIT, url };
+function fetchAudit(url: string): Promise<AuditResult> {
+  // Cuando Railway esté listo: return fetch("/api/audit", { method: "POST", body: JSON.stringify({ url }) }).then(r => r.json())
+  return new Promise((r) => setTimeout(() => r({ ...DEMO_AUDIT, url }), 2500));
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -98,8 +96,8 @@ export default function LandingPage() {
   const [scanning, setScanning]       = useState(false);
   const [reportData, setReportData]   = useState<AuditResult | null>(null);
 
-  // Almacena el resultado mientras el overlay todavía está animando
-  const pendingResult = useRef<AuditResult | null>(null);
+  // Guarda la Promise del fetch activo; handleScanDone la espera si no resolvió aún
+  const pendingFetch = useRef<Promise<AuditResult> | null>(null);
 
   useEffect(() => {
     const handler = () => setNavScrolled(window.scrollY > 40);
@@ -107,18 +105,22 @@ export default function LandingPage() {
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
-  const handleScan = useCallback(async () => {
+  const handleScan = useCallback(() => {
     if (!url.trim()) return;
     setScanning(true);
-    pendingResult.current = await fetchAudit(url);
+    pendingFetch.current = fetchAudit(url);
   }, [url]);
 
-  const handleScanDone = useCallback(() => {
-    setScanning(false);
-    if (pendingResult.current) {
-      setReportData(pendingResult.current);
-      pendingResult.current = null;
+  // Llamado por ScanOverlay cuando su animación termina (~4s).
+  // Si el backend todavía no respondió, mantiene el overlay abierto hasta que resuelva.
+  const handleScanDone = useCallback(async () => {
+    let result: AuditResult | null = null;
+    if (pendingFetch.current) {
+      result = await pendingFetch.current;
+      pendingFetch.current = null;
     }
+    setScanning(false);
+    if (result) setReportData(result);
     scrollToDemo();
   }, []);
 
