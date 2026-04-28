@@ -134,7 +134,7 @@ export default function LandingPage() {
 
       <PoweredByStrip />
 
-      <DemoReport reportData={reportData} onScan={handleScan} />
+      <DemoReport reportData={reportData} url={url} onUrlChange={setUrl} onScan={handleScan} />
 
       <HowItWorks />
 
