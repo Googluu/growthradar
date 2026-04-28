@@ -1,6 +1,7 @@
 "use client";
 
 import { useInView } from "@/hooks/useInView";
+import type { AuditResult } from "@/types/audit";
 
 // ── Score Ring ─────────────────────────────────────────────────────────────────
 function ScoreRing({ score, started }: { score: number; started: boolean }) {
@@ -202,7 +203,12 @@ const RECS: RecData[] = [
 ];
 
 // ── Main Component ─────────────────────────────────────────────────────────────
-export function DemoReport() {
+interface Props {
+  reportData: AuditResult | null; // null = modo demo (dian.gov.co)
+  onScan: () => void;             // dispara el scan desde el input secundario
+}
+
+export function DemoReport({ reportData: _reportData, onScan: _onScan }: Props) {
   const [ref, inView] = useInView();
 
   return (
