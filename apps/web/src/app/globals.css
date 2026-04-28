@@ -104,3 +104,90 @@ input::placeholder { color: var(--txt-faint); }
 /* Large background logo in footer CTA */
 [data-theme="dark"]  .logo-bg { opacity: 0.03; filter: none; }
 [data-theme="light"] .logo-bg { opacity: 0.04; filter: brightness(0); }
+
+/* ── DEMO REPORT ── */
+@keyframes barGrow {
+  from { width: 0%; }
+  to   { width: var(--bar-w); }
+}
+@keyframes demoBlink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+@keyframes demoPulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(93,184,72,0.4); }
+  50%      { box-shadow: 0 0 0 8px rgba(93,184,72,0); }
+}
+
+.demo-blink { animation: demoBlink 1.4s ease-in-out infinite; }
+.demo-pulse { animation: demoPulse 2s ease-in-out infinite; }
+
+.demo-bar {
+  height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.07);
+  overflow: hidden; margin-top: 6px;
+}
+.demo-bar-fill {
+  height: 100%; border-radius: 2px;
+  animation: barGrow 1s cubic-bezier(0.16,1,0.3,1) forwards;
+  animation-play-state: paused;
+}
+.demo-bar-fill.animate { animation-play-state: running; }
+
+.demo-check-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.demo-check-row:last-child { border-bottom: none; }
+
+.demo-rec-card {
+  border-radius: 12px; padding: 24px;
+  background: var(--bg3);
+  transition: transform 0.2s;
+}
+.demo-rec-card:hover { transform: translateY(-2px); }
+
+.demo-btn-primary {
+  background: var(--accent); color: #fff; border: none;
+  padding: 14px 28px; border-radius: 8px;
+  font-size: 15px; font-weight: 600;
+  cursor: pointer; transition: filter 0.15s, transform 0.15s;
+}
+.demo-btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+.demo-btn-outline {
+  background: transparent; color: var(--txt-muted);
+  border: 1px solid var(--border);
+  padding: 14px 28px; border-radius: 8px;
+  font-size: 15px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s;
+}
+.demo-btn-outline:hover { border-color: var(--border-soft); color: var(--txt); background: var(--bg2); }
+
+/* Responsive grid for Row 1 (Score Ring + AI Summary) */
+.demo-row1 {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+@media (min-width: 768px) {
+  .demo-row1 {
+    display: grid;
+    grid-template-columns: minmax(240px, 300px) 1fr;
+    align-items: stretch;
+  }
+}
+
+/* AI card: full radius mobile, right-only on desktop (left green border) */
+.demo-ai-card { border-radius: 16px; }
+@media (min-width: 768px) {
+  .demo-ai-card { border-radius: 0 16px 16px 0; }
+}
+
+/* Recommendations grid */
+.demo-recs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
