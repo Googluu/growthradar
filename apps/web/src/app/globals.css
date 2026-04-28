@@ -179,15 +179,21 @@ input::placeholder { color: var(--txt-faint); }
   }
 }
 
-/* AI card: full radius mobile, right-only on desktop (left green border) */
-.demo-ai-card { border-radius: 16px; }
+/* AI card: full radius mobile (green left accent looks good standalone),
+   right-only radius on desktop where it sits next to the Score Ring card */
+.demo-ai-card { border-radius: 12px; }
 @media (min-width: 768px) {
   .demo-ai-card { border-radius: 0 16px 16px 0; }
 }
 
-/* Recommendations grid */
+/* Recommendations grid: 1 col mobile/tablet, 3 cols desktop */
 .demo-recs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: 1fr;
   gap: 16px;
+}
+@media (min-width: 1024px) {
+  .demo-recs-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
