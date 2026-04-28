@@ -1,5 +1,7 @@
 "use client";
 
+import { useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useInView } from "@/hooks/useInView";
 import type { AuditResult, Recommendation } from "@/types/audit";
 
@@ -190,6 +192,14 @@ interface Props {
 
 export function DemoReport({ reportData, url, onUrlChange, onScan }: Props) {
   const [ref, inView] = useInView();
+  const router = useRouter();
+
+  // Paso 2.5: verifica sesión antes de navegar al dashboard
+  // Cuando Supabase esté listo reemplazar con: const { data: { session } } = await supabase.auth.getSession()
+  const handleViewReport = useCallback(() => {
+    const hasSession = false; // TODO: await supabase.auth.getSession()
+    router.push(hasSession ? "/dashboard" : "/register?next=/dashboard");
+  }, [router]);
 
   const isDemo = reportData === null;
   const data   = reportData ?? DEMO_DATA;
@@ -430,7 +440,7 @@ export function DemoReport({ reportData, url, onUrlChange, onScan }: Props) {
               <button
                 className="demo-btn-primary demo-pulse"
                 style={{ fontFamily: "var(--font-dm-sans)", fontSize: 16, padding: "16px 36px" }}
-                onClick={() => { /* paso 2.5: nav a /register o /dashboard */ }}
+                onClick={handleViewReport}
               >
                 Ver reporte completo →
               </button>
