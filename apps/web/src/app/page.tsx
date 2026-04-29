@@ -161,6 +161,25 @@ async function pollAudit(job_id: string, url: string): Promise<AuditResult> {
   throw new Error("audit_timeout");
 }
 
+// ── Cache localStorage ────────────────────────────────────────────────────────
+const CACHE_KEY = "eda_audit_v1";
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
+
+function readCache(): AuditResult | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { result, ts } = JSON.parse(raw) as { result: AuditResult; ts: number };
+    if (Date.now() - ts > CACHE_TTL) { localStorage.removeItem(CACHE_KEY); return null; }
+    return result;
+  } catch { return null; }
+}
+
+function writeCache(result: AuditResult) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ result, ts: Date.now() })); }
+  catch { /* localStorage lleno — ignorar */ }
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function LandingPage() {
   const [navScrolled, setNavScrolled]       = useState(false);
@@ -171,6 +190,12 @@ export default function LandingPage() {
   const [trialExhausted, setTrialExhausted] = useState(false);
 
   const pendingResult = useRef<AuditResult | null>(null);
+
+  // Restaurar reporte cacheado al montar (persiste el resultado tras refresh)
+  useEffect(() => {
+    const cached = readCache();
+    if (cached) setReportData(cached);
+  }, []);
 
   useEffect(() => {
     const handler = () => setNavScrolled(window.scrollY > 40);
@@ -201,6 +226,7 @@ export default function LandingPage() {
     pollAudit(job_id, url)
       .then((result) => {
         pendingResult.current = result;
+        writeCache(result);
         setAuditReady(true);
       })
       .catch((err) => {
