@@ -112,11 +112,15 @@ def run_public_audit(self: "run_public_audit", job_id: str, url: str) -> dict:  
                     "crux": crux_data,
                     "seo": {"onpage": onpage_data, "domain_rank": domain_rank_data},
                 }
-                result["recommendations"] = generate_recommendations(
+                recs = generate_recommendations(
                     company_name=domain,
                     company_domain=domain,
                     audit_data=audit_payload,
                 )
+                # Limitar a 3 recomendaciones en el endpoint público
+                if isinstance(recs.get("top_recommendations"), list):
+                    recs["top_recommendations"] = recs["top_recommendations"][:3]
+                result["recommendations"] = recs
             except Exception as recs_exc:
                 recs_note = f"recommendations_error: {recs_exc}"
             if recs_note:
