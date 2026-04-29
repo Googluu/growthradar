@@ -188,9 +188,10 @@ interface Props {
   url: string;                    // compartido con Hero input
   onUrlChange: (v: string) => void;
   onScan: () => void;
+  trialExhausted?: boolean;
 }
 
-export function DemoReport({ reportData, url, onUrlChange, onScan }: Props) {
+export function DemoReport({ reportData, url, onUrlChange, onScan, trialExhausted = false }: Props) {
   const [ref, inView] = useInView();
   const router = useRouter();
 
@@ -390,7 +391,30 @@ export function DemoReport({ reportData, url, onUrlChange, onScan }: Props) {
 
         {/* ── Footer CTA ── */}
         <div style={{ marginTop: 48 }}>
-          {isDemo ? (
+          {trialExhausted && isDemo ? (
+            /* TRIAL AGOTADO: CTA de registro */
+            <div style={{ textAlign: "center", maxWidth: 480, margin: "0 auto" }}>
+              <div style={{
+                background: "rgba(93,184,72,0.08)", border: "1px solid rgba(93,184,72,0.25)",
+                borderRadius: 14, padding: "28px 32px",
+              }}>
+                <div style={{ fontSize: 28, marginBottom: 12 }}>🎉</div>
+                <p style={{ fontFamily: "var(--font-syne)", fontWeight: 800, fontSize: 20, color: "var(--txt)", letterSpacing: "-0.5px", marginBottom: 8 }}>
+                  Ya usaste tu auditoría de prueba
+                </p>
+                <p style={{ fontFamily: "var(--font-dm-sans)", fontSize: 14, color: "var(--txt-muted)", lineHeight: 1.6, marginBottom: 20 }}>
+                  Crea una cuenta gratuita para auditar más sitios, guardar tu historial y recibir alertas de regresión semanales.
+                </p>
+                <a href="/register" style={{
+                  display: "inline-block", background: "var(--accent)", color: "#fff",
+                  fontFamily: "var(--font-dm-sans)", fontWeight: 700, fontSize: 15,
+                  padding: "14px 32px", borderRadius: 10, textDecoration: "none",
+                }}>
+                  Crear cuenta gratis →
+                </a>
+              </div>
+            </div>
+          ) : isDemo ? (
             /* MODO DEMO: input secundario + botón auditar */
             <div style={{ textAlign: "center" }}>
               <p style={{ fontFamily: "var(--font-syne)", fontWeight: 700, fontSize: 18, color: "var(--txt)", marginBottom: 16, letterSpacing: "-0.5px" }}>

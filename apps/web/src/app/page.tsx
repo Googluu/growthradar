@@ -131,15 +131,20 @@ const API_BASE = "http://localhost:8000";
 const POLL_INTERVAL_MS = 4_000;
 const POLL_TIMEOUT_MS  = 120_000;
 
-async function fetchAudit(url: string): Promise<AuditResult> {
-  const startRes = await fetch(`${API_BASE}/public/audit`, {
+// Dispara la auditoría; lanza "trial_used" si la IP ya usó su prueba gratuita
+async function triggerAudit(url: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/public/audit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
   });
-  if (!startRes.ok) throw new Error(`audit_trigger_failed:${startRes.status}`);
-  const { job_id } = await startRes.json();
+  if (res.status === 429) throw new Error("trial_used");
+  if (!res.ok) throw new Error(`trigger_failed:${res.status}`);
+  const { job_id } = await res.json();
+  return job_id as string;
+}
 
+async function pollAudit(job_id: string, url: string): Promise<AuditResult> {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
@@ -158,10 +163,11 @@ async function fetchAudit(url: string): Promise<AuditResult> {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function LandingPage() {
-  const [navScrolled, setNavScrolled] = useState(false);
-  const [url, setUrl]                 = useState("");
-  const [scanning, setScanning]       = useState(false);
-  const [reportData, setReportData]   = useState<AuditResult | null>(null);
+  const [navScrolled, setNavScrolled]     = useState(false);
+  const [url, setUrl]                     = useState("");
+  const [scanning, setScanning]           = useState(false);
+  const [reportData, setReportData]       = useState<AuditResult | null>(null);
+  const [trialExhausted, setTrialExhausted] = useState(false);
 
   const pendingFetch = useRef<Promise<AuditResult> | null>(null);
 
@@ -171,11 +177,24 @@ export default function LandingPage() {
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
-  const handleScan = useCallback(() => {
-    if (!url.trim()) return;
+  const handleScan = useCallback(async () => {
+    if (!url.trim() || scanning) return;
+
+    // Pre-validar antes de mostrar el overlay — detecta rate-limit sin animar
+    let job_id: string;
+    try {
+      job_id = await triggerAudit(url);
+    } catch (err) {
+      if (err instanceof Error && err.message === "trial_used") {
+        setTrialExhausted(true);
+        scrollToDemo();
+      }
+      return;
+    }
+
     setScanning(true);
-    pendingFetch.current = fetchAudit(url);
-  }, [url]);
+    pendingFetch.current = pollAudit(job_id, url);
+  }, [url, scanning]);
 
   const handleScanDone = useCallback(async () => {
     let result: AuditResult | null = null;
@@ -202,7 +221,7 @@ export default function LandingPage() {
 
       <PoweredByStrip />
 
-      <DemoReport reportData={reportData} url={url} onUrlChange={setUrl} onScan={handleScan} />
+      <DemoReport reportData={reportData} url={url} onUrlChange={setUrl} onScan={handleScan} trialExhausted={trialExhausted} />
 
       <HowItWorks />
 
