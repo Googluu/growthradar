@@ -163,13 +163,14 @@ async function pollAudit(job_id: string, url: string): Promise<AuditResult> {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function LandingPage() {
-  const [navScrolled, setNavScrolled]     = useState(false);
-  const [url, setUrl]                     = useState("");
-  const [scanning, setScanning]           = useState(false);
-  const [reportData, setReportData]       = useState<AuditResult | null>(null);
+  const [navScrolled, setNavScrolled]       = useState(false);
+  const [url, setUrl]                       = useState("");
+  const [scanning, setScanning]             = useState(false);
+  const [auditReady, setAuditReady]         = useState(false);
+  const [reportData, setReportData]         = useState<AuditResult | null>(null);
   const [trialExhausted, setTrialExhausted] = useState(false);
 
-  const pendingFetch = useRef<Promise<AuditResult> | null>(null);
+  const pendingResult = useRef<AuditResult | null>(null);
 
   useEffect(() => {
     const handler = () => setNavScrolled(window.scrollY > 40);
@@ -193,27 +194,35 @@ export default function LandingPage() {
     }
 
     setScanning(true);
-    pendingFetch.current = pollAudit(job_id, url);
+    setAuditReady(false);
+    pendingResult.current = null;
+
+    // Lanza el polling en background; cuando resuelve señala al overlay
+    pollAudit(job_id, url)
+      .then((result) => {
+        pendingResult.current = result;
+        setAuditReady(true);
+      })
+      .catch((err) => {
+        console.error("[EDA] Poll error:", err);
+        setAuditReady(true); // cierra el overlay aunque haya error
+      });
   }, [url, scanning]);
 
-  const handleScanDone = useCallback(async () => {
-    let result: AuditResult | null = null;
-    if (pendingFetch.current) {
-      try {
-        result = await pendingFetch.current;
-      } catch (err) {
-        console.error("[EDA] Audit error:", err);
-      }
-      pendingFetch.current = null;
-    }
+  // Llamado por ScanOverlay DESPUÉS de su animación de "done" (~0.9s post-ready)
+  const handleScanDone = useCallback(() => {
     setScanning(false);
-    if (result) setReportData(result);
+    setAuditReady(false);
+    if (pendingResult.current) {
+      setReportData(pendingResult.current);
+      pendingResult.current = null;
+    }
     scrollToDemo();
   }, []);
 
   return (
     <>
-      {scanning && <ScanOverlay url={url} onDone={handleScanDone} />}
+      {scanning && <ScanOverlay url={url} ready={auditReady} onDone={handleScanDone} />}
 
       <Nav scrolled={navScrolled} onAuditClick={focusHeroInput} />
 
