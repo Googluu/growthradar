@@ -1,6 +1,5 @@
 "use client";
 
-import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useInView } from "@/hooks/useInView";
 import type { AuditResult, Recommendation } from "@/types/audit";
@@ -194,13 +193,6 @@ interface Props {
 export function DemoReport({ reportData, url, onUrlChange, onScan, trialExhausted = false }: Props) {
   const [ref, inView] = useInView();
   const router = useRouter();
-
-  // Paso 2.5: verifica sesión antes de navegar al dashboard
-  // Cuando Supabase esté listo reemplazar con: const { data: { session } } = await supabase.auth.getSession()
-  const handleViewReport = useCallback(() => {
-    const hasSession = false; // TODO: await supabase.auth.getSession()
-    router.push(hasSession ? "/dashboard" : "/register?next=/dashboard");
-  }, [router]);
 
   const isDemo = reportData === null;
   const data   = reportData ?? DEMO_DATA;
@@ -453,9 +445,18 @@ export function DemoReport({ reportData, url, onUrlChange, onScan, trialExhauste
               <p style={{ color: "var(--txt-muted)", fontSize: 13, fontFamily: "var(--font-dm-sans)" }}>
                 Resultado en &lt;30 segundos · Sin tarjeta de crédito
               </p>
+              <div style={{ marginTop: 20 }}>
+                <button
+                  className="demo-btn-primary"
+                  style={{ fontFamily: "var(--font-dm-sans)", fontSize: 15, padding: "14px 32px" }}
+                  onClick={() => router.push("/dashboard")}
+                >
+                  Ver el panel completo del reporte DEMO →
+                </button>
+              </div>
             </div>
           ) : (
-            /* MODO REAL: solo botón "Ver reporte completo" */
+            /* MODO REAL: solo botón "Ver panel completo" */
             <div style={{ textAlign: "center" }}>
               <p style={{ fontFamily: "var(--font-syne)", fontWeight: 700, fontSize: 18, color: "var(--txt)", marginBottom: 16, letterSpacing: "-0.5px" }}>
                 Tu reporte está listo —{" "}
@@ -464,9 +465,9 @@ export function DemoReport({ reportData, url, onUrlChange, onScan, trialExhauste
               <button
                 className="demo-btn-primary demo-pulse"
                 style={{ fontFamily: "var(--font-dm-sans)", fontSize: 16, padding: "16px 36px" }}
-                onClick={handleViewReport}
+                onClick={() => router.push("/dashboard")}
               >
-                Ver reporte completo →
+                Ver el panel completo del reporte {data.url} →
               </button>
               <p style={{ color: "var(--txt-muted)", fontSize: 13, fontFamily: "var(--font-dm-sans)", marginTop: 12 }}>
                 Crea tu cuenta gratis para guardar y acceder a tu diagnóstico completo
