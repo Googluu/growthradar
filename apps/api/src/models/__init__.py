@@ -3,3 +3,4 @@
 from src.models.company import Company  # noqa: F401
 from src.models.audit_job import AuditJob  # noqa: F401
 from src.models.public_audit_job import PublicAuditJob  # noqa: F401
+from src.models.dashboard_job import DashboardJob  # noqa: F401

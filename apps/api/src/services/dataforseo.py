@@ -105,7 +105,7 @@ def _headers() -> dict[str, str]:
 # ON-PAGE INSTANT PAGES
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def get_onpage_data(url: str) -> dict:
+def get_onpage_data(url: str, timeout: float = 25.0) -> dict:
     """
     Auditoría on-page síncrona de una URL.
 
@@ -118,7 +118,7 @@ def get_onpage_data(url: str) -> dict:
         url=f"{_BASE_URL}/on_page/instant_pages",
         headers=_headers(),
         json=[{"url": url, "load_resources": True, "enable_javascript": False}],
-        timeout=30.0,
+        timeout=timeout,
     )
     response.raise_for_status()
     return _parse_onpage(response.json())

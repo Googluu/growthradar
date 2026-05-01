@@ -22,5 +22,5 @@ celery_app.conf.update(
     accept_content=["json"],
     timezone="America/Bogota",
     enable_utc=True,
-    include=["src.tasks.audit", "src.tasks.public_audit"],
+    include=["src.tasks.audit", "src.tasks.public_audit", "src.tasks.dashboard_audit"],
 )
