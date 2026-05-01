@@ -1,8 +1,11 @@
 """
 CrUX API service — Chrome User Experience Report.
 
-Consulta datos reales de performance de campo (p75) para un dominio.
-Si el dominio no tiene suficiente tráfico en Chrome → retorna CruxNoDataError.
+Endpoints integrados:
+  - records:queryRecord         → snapshot actual (p75 último periodo)
+  - records:queryHistoryRecord  → timeseries semanal de los últimos ~6 meses
+
+Si el dominio no tiene suficiente tráfico en Chrome → CruxNoDataError.
 
 Docs: https://developer.chrome.com/docs/crux/api
 """
@@ -11,7 +14,8 @@ import httpx
 
 from src.config import settings
 
-CRUX_ENDPOINT = "https://chromeuxreport.googleapis.com/v1/records:queryRecord"
+_CRUX_QUERY_ENDPOINT = "https://chromeuxreport.googleapis.com/v1/records:queryRecord"
+_CRUX_HISTORY_ENDPOINT = "https://chromeuxreport.googleapis.com/v1/records:queryHistoryRecord"
 
 # Umbrales oficiales Core Web Vitals (p75)
 # https://web.dev/articles/defining-core-web-vitals-thresholds
@@ -52,6 +56,16 @@ def _extract_p75(metric_data: dict) -> float | None:
         return None
 
 
+def _fmt_date(d: dict | None) -> str | None:
+    if not d:
+        return None
+    return f"{d.get('year')}-{d.get('month', 0):02d}-{d.get('day', 0):02d}"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CrUX — Snapshot actual
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def query_crux(origin: str, form_factor: str = "DESKTOP") -> dict:
     """
     Consulta la CrUX API de forma síncrona (para uso desde el worker Celery).
@@ -64,7 +78,7 @@ def query_crux(origin: str, form_factor: str = "DESKTOP") -> dict:
         httpx.HTTPError: si hay un error de red o la API retorna un error inesperado.
     """
     response = httpx.post(
-        url=f"{CRUX_ENDPOINT}?key={settings.crux_api_key}",
+        url=f"{_CRUX_QUERY_ENDPOINT}?key={settings.crux_api_key}",
         json={"origin": origin, "formFactor": form_factor},
         headers={"Content-Type": "application/json"},
         timeout=15.0,
@@ -74,10 +88,10 @@ def query_crux(origin: str, form_factor: str = "DESKTOP") -> dict:
         raise CruxNoDataError(f"No CrUX data for {origin}")
 
     response.raise_for_status()
-    return _parse(response.json(), origin)
+    return _parse(response.json(), origin, form_factor)
 
 
-def _parse(raw: dict, origin: str) -> dict:
+def _parse(raw: dict, origin: str, form_factor: str) -> dict:
     metrics_raw = raw.get("record", {}).get("metrics", {})
     collection = raw.get("record", {}).get("collectionPeriod", {})
 
@@ -87,12 +101,20 @@ def _parse(raw: dict, origin: str) -> dict:
     for metric_name in _THRESHOLDS:
         metric_data = metrics_raw.get(metric_name)
         if not metric_data:
-            parsed_metrics[metric_name] = {"p75": None, "unit": _UNITS[metric_name], "rating": "no_data"}
+            parsed_metrics[metric_name] = {
+                "p75": None,
+                "unit": _UNITS[metric_name],
+                "rating": "no_data",
+            }
             continue
 
         p75 = _extract_p75(metric_data)
         rating = _classify(metric_name, p75) if p75 is not None else "no_data"
-        parsed_metrics[metric_name] = {"p75": p75, "unit": _UNITS[metric_name], "rating": rating}
+        parsed_metrics[metric_name] = {
+            "p75": p75,
+            "unit": _UNITS[metric_name],
+            "rating": rating,
+        }
 
         if rating == "good":
             score_inputs.append(100)
@@ -103,17 +125,123 @@ def _parse(raw: dict, origin: str) -> dict:
 
     performance_score = round(sum(score_inputs) / len(score_inputs)) if score_inputs else 0
 
-    def _fmt_date(d: dict) -> str | None:
-        if not d:
-            return None
-        return f"{d.get('year')}-{d.get('month', 0):02d}-{d.get('day', 0):02d}"
-
     return {
         "origin": origin,
+        "form_factor": form_factor,
         "collection_period": {
             "from": _fmt_date(collection.get("firstDate")),
             "to": _fmt_date(collection.get("lastDate")),
         },
         "metrics": parsed_metrics,
         "performance_score": performance_score,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CrUX History — Timeseries semanal (~6 meses)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def query_crux_history(origin: str, form_factor: str = "DESKTOP") -> dict:
+    """
+    Consulta la CrUX History API.
+
+    Devuelve hasta 25 puntos semanales (~6 meses) por métrica, permitiendo
+    visualizar tendencias y detectar regresiones de performance en el tiempo.
+
+    Mismo dominio puede tener datos en queryRecord pero no en History
+    (requiere más tráfico sostenido). El fallback ante CruxNoDataError es
+    simplemente no mostrar la sección de tendencia.
+
+    Raises:
+        CruxNoDataError: si el dominio no tiene datos históricos en CrUX (404).
+    """
+    response = httpx.post(
+        url=f"{_CRUX_HISTORY_ENDPOINT}?key={settings.crux_api_key}",
+        json={"origin": origin, "formFactor": form_factor},
+        headers={"Content-Type": "application/json"},
+        timeout=20.0,
+    )
+
+    if response.status_code == 404:
+        raise CruxNoDataError(f"No CrUX history data for {origin}")
+
+    response.raise_for_status()
+    return _parse_history(response.json(), origin, form_factor)
+
+
+def _parse_history(raw: dict, origin: str, form_factor: str) -> dict:
+    record = raw.get("record", {})
+    metrics_raw = record.get("metrics", {})
+    collection_periods = record.get("collectionPeriods", []) or []
+
+    # Lista ordenada de fechas correspondiente a cada índice del timeseries
+    dates_to = [_fmt_date(p.get("lastDate")) for p in collection_periods]
+    dates_from = [_fmt_date(p.get("firstDate")) for p in collection_periods]
+
+    parsed_metrics: dict[str, dict] = {}
+
+    for metric_name in _THRESHOLDS:
+        metric_data = metrics_raw.get(metric_name)
+        if not metric_data:
+            parsed_metrics[metric_name] = {
+                "unit": _UNITS[metric_name],
+                "timeseries": [],
+                "current_p75": None,
+                "previous_p75": None,
+                "current_rating": "no_data",
+                "trend": "no_data",
+                "delta_pct": None,
+            }
+            continue
+
+        p75_series = (metric_data.get("percentilesTimeseries") or {}).get("p75s") or []
+
+        timeseries = []
+        for i, raw_value in enumerate(p75_series):
+            # La API a veces devuelve None para semanas sin tráfico suficiente
+            value = float(raw_value) if raw_value is not None else None
+            rating = _classify(metric_name, value) if value is not None else "no_data"
+            timeseries.append({
+                "date_from": dates_from[i] if i < len(dates_from) else None,
+                "date_to": dates_to[i] if i < len(dates_to) else None,
+                "p75": value,
+                "rating": rating,
+            })
+
+        valid_values = [t["p75"] for t in timeseries if t["p75"] is not None]
+        current_p75 = valid_values[-1] if valid_values else None
+        previous_p75 = valid_values[-2] if len(valid_values) >= 2 else None
+
+        # Tendencia: comparar primer cuartil vs último cuartil de la serie
+        # Para todas las métricas CWV, menor es mejor → delta negativo = mejora.
+        trend = "stable"
+        delta_pct: float | None = None
+        if len(valid_values) >= 4:
+            q = max(len(valid_values) // 4, 1)
+            first_avg = sum(valid_values[:q]) / q
+            last_avg = sum(valid_values[-q:]) / q
+            if first_avg > 0:
+                delta_pct = round((last_avg - first_avg) / first_avg * 100, 1)
+                if delta_pct < -5:
+                    trend = "improving"
+                elif delta_pct > 5:
+                    trend = "degrading"
+
+        parsed_metrics[metric_name] = {
+            "unit": _UNITS[metric_name],
+            "timeseries": timeseries,
+            "current_p75": current_p75,
+            "previous_p75": previous_p75,
+            "current_rating": _classify(metric_name, current_p75) if current_p75 is not None else "no_data",
+            "trend": trend,
+            "delta_pct": delta_pct,
+        }
+
+    return {
+        "origin": origin,
+        "form_factor": form_factor,
+        "data_points_count": len(collection_periods),
+        "first_date": dates_from[0] if dates_from else None,
+        "last_date": dates_to[-1] if dates_to else None,
+        "metrics": parsed_metrics,
     }

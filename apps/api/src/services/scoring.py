@@ -10,6 +10,10 @@ Pesos base por dimensión (suman 100):
 Cuando una dimensión no tiene datos (None), su peso se redistribuye
 proporcionalmente entre las dimensiones disponibles para que el
 health_score siempre refleje el 100% de la información existente.
+
+Las funciones `derive_*` mapean las respuestas crudas de los servicios
+(DataForSEO, CrUX, Business Data) a las dimensiones de score. Esto
+mantiene la lógica de scoring desacoplada de los providers.
 """
 
 from dataclasses import dataclass
@@ -30,16 +34,18 @@ class HealthScoreResult:
     total_dimensions: int        # total de dimensiones posibles
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# COMPOSICIÓN — health_score
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def calculate_health_score(scores: dict[str, int | None]) -> HealthScoreResult:
     """
     Calcula el health_score ponderado a partir de los sub-scores.
 
     Args:
         scores: dict con claves seo_score, performance_score, social_score,
-                reputation_score. Los valores None se excluyen del cálculo.
-
-    Returns:
-        HealthScoreResult con health_score, breakdown y metadatos.
+                reputation_score. Los valores None se excluyen del cálculo
+                y su peso se redistribuye al resto.
     """
     available = {
         dim: score
@@ -55,10 +61,8 @@ def calculate_health_score(scores: dict[str, int | None]) -> HealthScoreResult:
             total_dimensions=len(_BASE_WEIGHTS),
         )
 
-    # Suma de pesos base de las dimensiones disponibles
     total_base_weight = sum(_BASE_WEIGHTS[dim] for dim in available)
 
-    # Peso efectivo de cada dimensión disponible (redistribuido al 100%)
     effective_weights = {
         dim: _BASE_WEIGHTS[dim] / total_base_weight
         for dim in available
@@ -77,7 +81,6 @@ def calculate_health_score(scores: dict[str, int | None]) -> HealthScoreResult:
         for dim, score in available.items()
     }
 
-    # Dimensiones sin datos — anotadas para transparencia
     for dim in _BASE_WEIGHTS:
         if dim not in available:
             breakdown[dim] = {
@@ -92,3 +95,117 @@ def calculate_health_score(scores: dict[str, int | None]) -> HealthScoreResult:
         available_dimensions=len(available),
         total_dimensions=len(_BASE_WEIGHTS),
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DERIVACIÓN — Mapping providers → sub-scores
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def derive_subscores(
+    *,
+    seo_score: int | None = None,
+    crux_data: dict | None = None,
+    onpage_data: dict | None = None,
+    business_data: dict | None = None,
+    social_data: dict | None = None,
+) -> dict[str, int | None]:
+    """
+    Mapea las respuestas crudas de los servicios a las 4 dimensiones del
+    health_score. Devuelve un dict listo para pasar a calculate_health_score().
+
+    Args:
+        seo_score: precomputado por dataforseo.calculate_seo_score(onpage).
+            Pasarlo desde fuera evita imports circulares.
+        crux_data: respuesta de crux.query_crux. Si no hay, se usa fallback.
+        onpage_data: respuesta de dataforseo.get_onpage_data — se usa solo
+            como fallback de performance cuando CrUX no tiene datos.
+        business_data: respuesta de Business Data API (futuro). Hoy None.
+        social_data: respuesta de APIs sociales (futuro). Hoy None.
+    """
+    return {
+        "seo_score":         seo_score,
+        "performance_score": derive_performance_score(crux_data, onpage_data),
+        "social_score":      derive_social_score(social_data),
+        "reputation_score":  derive_reputation_score(business_data),
+    }
+
+
+def derive_performance_score(
+    crux_data: dict | None,
+    onpage_data: dict | None = None,
+) -> int | None:
+    """
+    Performance score:
+      1. Preferimos CrUX (datos reales de campo, p75 de usuarios reales).
+      2. Si no hay CrUX (sitio sin tráfico suficiente en Chrome), usamos
+         OnPage timing como proxy (datos sintéticos del crawler de DataForSEO).
+      3. Si no hay ninguno → None y el peso se redistribuye.
+    """
+    if crux_data and isinstance(crux_data, dict) and "error" not in crux_data:
+        score = crux_data.get("performance_score")
+        if score is not None:
+            return score
+
+    # Fallback: TTI sintético del crawler. Heurística simple alineada con
+    # los thresholds aproximados de Lighthouse para Time to Interactive.
+    if onpage_data and isinstance(onpage_data, dict) and "error" not in onpage_data:
+        perf = onpage_data.get("performance") or {}
+        tti = perf.get("time_to_interactive_ms")
+        if tti is None:
+            return None
+        if tti < 3800:
+            return 90
+        if tti < 7300:
+            return 60
+        return 30
+
+    return None
+
+
+def derive_reputation_score(business_data: dict | None) -> int | None:
+    """
+    Reputation score basado en datos de Google My Business
+    (Business Data API — pendiente de integración en próximo sprint).
+
+    Espera un dict con la forma:
+        {"rating": {"value": float, "votes_count": int}}
+
+    Lógica:
+      - Score base = (rating / 5) * 100
+      - Penalización si tiene < 10 reviews (poca confianza)
+      - Penalización menor si < 30 reviews
+    """
+    if not business_data or not isinstance(business_data, dict):
+        return None
+    if "error" in business_data:
+        return None
+
+    rating_obj = business_data.get("rating") or {}
+    rating = rating_obj.get("value")
+    review_count = rating_obj.get("votes_count", 0)
+
+    if rating is None:
+        return None
+
+    base_score = int((rating / 5) * 100)
+
+    if review_count < 10:
+        return int(base_score * 0.7)
+    if review_count < 30:
+        return int(base_score * 0.85)
+    return min(100, base_score)
+
+
+def derive_social_score(social_data: dict | None) -> int | None:
+    """
+    Social score — pendiente de integración en Phase 2.
+
+    Cuando se integre, debería considerar:
+      - Cantidad de plataformas activas (IG, FB, TikTok, LinkedIn, X)
+      - Frecuencia de publicación últimos 30 días
+      - Engagement rate promedio (likes+comentarios / followers)
+      - Crecimiento de followers mes a mes
+    """
+    if not social_data:
+        return None
+    return None

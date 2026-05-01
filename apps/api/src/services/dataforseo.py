@@ -7,6 +7,7 @@ Endpoints integrados:
   - serp/google/organic/live/advanced                        → SERP en vivo (~2s)
   - dataforseo_labs/google/related_keywords/live             → keyword research (~0.4s)
   - keywords_data/google_ads/search_volume/live              → volumen Google Ads exacto
+  - dataforseo_labs/categories                               → taxonomía Labs (gratis, una vez)
 
 Cada parser devuelve campos normalizados listos para alimentar el dashboard.
 El contrato de error es uniforme: dict con "error" cuando algo falla.
@@ -22,7 +23,7 @@ from src.config import settings
 
 _BASE_URL = "https://api.dataforseo.com/v3"
 
-# Pesos del seo_score — suma 100
+# Pesos del seo_score — suman 100
 _WEIGHTS = {
     "is_https":              15,
     "has_meta_title":        15,
@@ -30,12 +31,10 @@ _WEIGHTS = {
     "has_h1":                15,
     "has_sitemap":           10,
     "has_robots_txt":        10,
-    "title_length_ok":       10,   # 40-60 caracteres
-    "images_alt_ok":         10,   # < 10% imágenes sin alt
+    "title_length_ok":       10,
+    "images_alt_ok":         10,
 }
 
-# ─── Clasificación de checks de OnPage ────────────────────────────────────────
-# Mapeo nombre_check → etiqueta legible. Si el check está en TRUE, es problema.
 _ONPAGE_CRITICAL_ISSUES: dict[str, str] = {
     "is_broken":                       "Página rota",
     "is_4xx_code":                     "Respuesta 4xx",
@@ -78,7 +77,6 @@ _ONPAGE_CRITICAL_ISSUES: dict[str, str] = {
     "frame":                           "Usa frames",
 }
 
-# Mapeo nombre_check → etiqueta. Si el check está en TRUE, es positivo.
 _ONPAGE_POSITIVE_CHECKS: dict[str, str] = {
     "is_https":                                   "Usa HTTPS",
     "canonical":                                  "Tiene canonical",
@@ -105,15 +103,7 @@ def _headers() -> dict[str, str]:
 # ON-PAGE INSTANT PAGES
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def get_onpage_data(url: str, timeout: float = 25.0) -> dict:
-    """
-    Auditoría on-page síncrona de una URL.
-
-    Returns:
-        dict con campos normalizados para el scoring y el dashboard.
-        Mantiene los campos planos legacy + agrega secciones agrupadas.
-        Incluye 'error' si la llamada o el parseo falla.
-    """
+def get_onpage_data(url: str, timeout: float = 30.0) -> dict:
     response = httpx.post(
         url=f"{_BASE_URL}/on_page/instant_pages",
         headers=_headers(),
@@ -134,8 +124,7 @@ def _parse_onpage(raw: dict) -> dict:
                 "status_code": task.get("status_code"),
             }
 
-        result_block = task["result"][0]
-        item = result_block["items"][0]
+        item = task["result"][0]["items"][0]
         meta = item.get("meta") or {}
         checks = item.get("checks") or {}
         content = meta.get("content") or {}
@@ -147,13 +136,11 @@ def _parse_onpage(raw: dict) -> dict:
         description = meta.get("description") or ""
         h1_list = htags.get("h1") or []
         images_count = meta.get("images_count", 0)
-        # 'images_without_alt_count' viene en el item raíz en algunas versiones
         images_without_alt = item.get("images_without_alt_count", 0)
 
-        # ── Clasificar checks en issues / passing ─────────────────────────────
         issues = [
             {"check": name, "label": _ONPAGE_CRITICAL_ISSUES[name], "severity": "critical"}
-            for name, label in _ONPAGE_CRITICAL_ISSUES.items()
+            for name in _ONPAGE_CRITICAL_ISSUES
             if checks.get(name) is True
         ]
         passing = [
@@ -162,7 +149,6 @@ def _parse_onpage(raw: dict) -> dict:
             if checks.get(name) is True
         ]
 
-        # ── Salud general (proporción passing / total relevante) ──────────────
         relevant_checks = (
             len(_ONPAGE_CRITICAL_ISSUES) + len(_ONPAGE_POSITIVE_CHECKS)
         )
@@ -173,7 +159,7 @@ def _parse_onpage(raw: dict) -> dict:
         )
 
         return {
-            # ── Campos legacy (usados por calculate_seo_score) ────────────────
+            # Legacy (consumido por calculate_seo_score)
             "title": title,
             "title_length": len(title),
             "description": description,
@@ -194,7 +180,6 @@ def _parse_onpage(raw: dict) -> dict:
             "page_size_bytes": item.get("size", 0),
             "onpage_score_dataforseo": item.get("onpage_score", 0),
 
-            # ── URL y status básicos ──────────────────────────────────────────
             "url": item.get("url"),
             "status_code": item.get("status_code"),
             "fetch_time": item.get("fetch_time"),
@@ -203,12 +188,11 @@ def _parse_onpage(raw: dict) -> dict:
             "content_encoding": item.get("content_encoding"),
             "click_depth": item.get("click_depth"),
 
-            # ── Sección 1 dashboard: salud del sitio ─────────────────────────
             "health": {
-                "onpage_score": item.get("onpage_score", 0),     # 0-100 de DataForSEO
-                "computed_health_score": health_score,           # 0-100 propio
+                "onpage_score": item.get("onpage_score", 0),
+                "computed_health_score": health_score,
                 "issues_count": len(issues),
-                "issues_critical_count": len(issues),            # todos son critical aquí
+                "issues_critical_count": len(issues),
                 "passing_count": len(passing),
                 "is_indexable": (
                     not checks.get("is_redirect", False)
@@ -226,7 +210,6 @@ def _parse_onpage(raw: dict) -> dict:
                 ),
             },
 
-            # ── Sección 2 dashboard: auditoría técnica ────────────────────────
             "issues": issues,
             "passing_checks": passing,
             "broken_resources": item.get("broken_resources", False),
@@ -241,7 +224,6 @@ def _parse_onpage(raw: dict) -> dict:
             "resource_errors": resource_errors.get("errors") or [],
             "resource_warnings": resource_errors.get("warnings") or [],
 
-            # ── Sección 3 dashboard: rendimiento (page timing) ────────────────
             "performance": {
                 "time_to_interactive_ms":     page_timing.get("time_to_interactive"),
                 "dom_complete_ms":            page_timing.get("dom_complete"),
@@ -259,7 +241,6 @@ def _parse_onpage(raw: dict) -> dict:
                 "total_transfer_size_bytes":  item.get("total_transfer_size", 0),
             },
 
-            # ── Sección 4 dashboard: contenido y estructura ───────────────────
             "headings": {
                 "h1": htags.get("h1") or [],
                 "h2": htags.get("h2") or [],
@@ -303,11 +284,10 @@ def _parse_onpage(raw: dict) -> dict:
             "favicon": meta.get("favicon"),
             "meta_keywords": meta.get("meta_keywords"),
 
-            # ── Operacional ───────────────────────────────────────────────────
             "cost": task.get("cost"),
             "task_time": task.get("time"),
             "task_status_code": task.get("status_code"),
-            "raw_checks": checks,  # acceso completo si el dashboard lo necesita
+            "raw_checks": checks,
         }
 
     except (KeyError, IndexError, TypeError) as exc:
@@ -319,13 +299,6 @@ def _parse_onpage(raw: dict) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def get_domain_rank(domain: str) -> dict:
-    """
-    Métricas de autoridad orgánica y tráfico estimado del dominio.
-
-    Returns:
-        dict con etv, count, posiciones en top 1/3/10.
-        Incluye 'error' si falla.
-    """
     response = httpx.post(
         url=f"{_BASE_URL}/dataforseo_labs/google/domain_rank_overview/live",
         headers=_headers(),
@@ -365,10 +338,6 @@ def _parse_domain_rank(raw: dict) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def calculate_seo_score(onpage: dict) -> int:
-    """
-    Calcula el seo_score (0-100) a partir de los datos on-page.
-    No depende de domain_rank — ese dato va al resultado como contexto adicional.
-    """
     if "error" in onpage:
         return 0
 
@@ -390,8 +359,7 @@ def calculate_seo_score(onpage: dict) -> int:
         ),
     }
 
-    score = sum(_WEIGHTS[k] for k, ok in signals.items() if ok)
-    return score
+    return sum(_WEIGHTS[k] for k, ok in signals.items() if ok)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -400,30 +368,13 @@ def calculate_seo_score(onpage: dict) -> int:
 
 def get_serp_data(
     keyword: str,
-    location_code: int = 2170,        # Colombia (2840 = US, 2484 = México)
+    location_code: int = 2170,
     language_code: str = "es",
-    device: str = "desktop",          # 'desktop' | 'mobile'
-    os_name: str = "windows",         # 'windows' | 'macos' | 'android' | 'ios'
-    depth: int = 10,                  # 10 | 20 | 30 | 50 | 100
+    device: str = "desktop",
+    os_name: str = "windows",
+    depth: int = 10,
     target_domain: str | None = None,
 ) -> dict:
-    """
-    SERP de Google en vivo (modo Advanced) para un keyword.
-
-    Args:
-        keyword: término de búsqueda a analizar.
-        location_code: código de ubicación DataForSEO (2170 = Colombia).
-        language_code: idioma ISO 639-1 ('es', 'en', ...).
-        device: dispositivo simulado.
-        os_name: sistema operativo simulado.
-        depth: cantidad de resultados orgánicos a traer.
-        target_domain: si se provee, calcula la visibilidad del dominio
-            en esta SERP (posición, top_3, top_10, featured snippet).
-
-    Returns:
-        dict con campos normalizados para el dashboard.
-        Incluye 'error' si la llamada o el parseo falla.
-    """
     response = httpx.post(
         url=f"{_BASE_URL}/serp/google/organic/live/advanced",
         headers=_headers(),
@@ -455,17 +406,10 @@ def _parse_serp(raw: dict, target_domain: str | None = None) -> dict:
         items = result.get("items") or []
 
         organic_items = [i for i in items if i.get("type") == "organic"]
-        ai_overview_item = next(
-            (i for i in items if i.get("type") == "ai_overview"), None
-        )
-        related_searches_item = next(
-            (i for i in items if i.get("type") == "related_searches"), None
-        )
-        perspectives_item = next(
-            (i for i in items if i.get("type") == "perspectives"), None
-        )
+        ai_overview_item = next((i for i in items if i.get("type") == "ai_overview"), None)
+        related_searches_item = next((i for i in items if i.get("type") == "related_searches"), None)
+        perspectives_item = next((i for i in items if i.get("type") == "perspectives"), None)
 
-        # ── Tabla principal: resultados orgánicos ─────────────────────────────
         organic_results = [
             {
                 "rank_absolute": item.get("rank_absolute"),
@@ -494,7 +438,6 @@ def _parse_serp(raw: dict, target_domain: str | None = None) -> dict:
             for item in organic_items
         ]
 
-        # ── AI Overview ───────────────────────────────────────────────────────
         ai_overview = None
         if ai_overview_item:
             references = ai_overview_item.get("references") or []
@@ -512,13 +455,11 @@ def _parse_serp(raw: dict, target_domain: str | None = None) -> dict:
                 "references_count": len(references),
             }
 
-        # ── SERP features ─────────────────────────────────────────────────────
         serp_features = sorted({
             i.get("type") for i in items
             if i.get("type") and i.get("type") != "organic"
         })
 
-        # ── KPIs derivados ────────────────────────────────────────────────────
         ranks = [
             i.get("rank_absolute") for i in organic_items
             if i.get("rank_absolute") is not None
@@ -534,13 +475,10 @@ def _parse_serp(raw: dict, target_domain: str | None = None) -> dict:
 
         top_3_domains = [r["domain"] for r in organic_results[:3] if r.get("domain")]
         top_10_domains = [r["domain"] for r in organic_results[:10] if r.get("domain")]
-
         featured_snippet_domain = next(
-            (r["domain"] for r in organic_results if r.get("is_featured_snippet")),
-            None,
+            (r["domain"] for r in organic_results if r.get("is_featured_snippet")), None
         )
 
-        # ── Visibilidad del cliente (opcional) ────────────────────────────────
         target_visibility = None
         if target_domain:
             target_norm = target_domain.replace("www.", "").lower()
@@ -556,18 +494,11 @@ def _parse_serp(raw: dict, target_domain: str | None = None) -> dict:
                 "found": target_match is not None,
                 "position": target_match["rank_absolute"] if target_match else None,
                 "url": target_match["url"] if target_match else None,
-                "in_top_3": bool(
-                    target_match and target_match["rank_absolute"] and target_match["rank_absolute"] <= 3
-                ),
-                "in_top_10": bool(
-                    target_match and target_match["rank_absolute"] and target_match["rank_absolute"] <= 10
-                ),
-                "is_featured_snippet": bool(
-                    target_match and target_match.get("is_featured_snippet")
-                ),
+                "in_top_3": bool(target_match and target_match["rank_absolute"] and target_match["rank_absolute"] <= 3),
+                "in_top_10": bool(target_match and target_match["rank_absolute"] and target_match["rank_absolute"] <= 10),
+                "is_featured_snippet": bool(target_match and target_match.get("is_featured_snippet")),
             }
 
-        # ── Perspectives (foros, videos, redes que aparecen en SERP) ──────────
         perspectives = []
         if perspectives_item:
             for p in perspectives_item.get("items") or []:
@@ -623,25 +554,14 @@ def get_related_keywords(
     keyword: str,
     location_code: int = 2170,
     language_code: str = "es",
-    depth: int = 3,                          # 0 a 4 — qué tan lejos del seed
-    limit: int = 100,                        # máx 1000
+    depth: int = 3,
+    limit: int = 100,
     include_seed_keyword: bool = False,
     include_serp_info: bool = False,
     include_clickstream_data: bool = False,
     ignore_synonyms: bool = False,
     replace_with_core_keyword: bool = False,
 ) -> dict:
-    """
-    Keywords relacionadas a un seed con métricas completas de SEO/PPC.
-
-    Args:
-        keyword: keyword semilla.
-        depth: profundidad del árbol de relación (3 = hasta 3 niveles).
-        limit: máximo de keywords a retornar (hasta 1000).
-
-    Returns:
-        dict con lista de keywords + agregaciones para KPIs del dashboard.
-    """
     response = httpx.post(
         url=f"{_BASE_URL}/dataforseo_labs/google/related_keywords/live",
         headers=_headers(),
@@ -676,7 +596,6 @@ def _parse_related_keywords(raw: dict) -> dict:
         result = task["result"][0]
         items = result.get("items") or []
 
-        # ── Normalizar cada keyword ───────────────────────────────────────────
         keywords = []
         for item in items:
             kd = item.get("keyword_data") or {}
@@ -710,31 +629,21 @@ def _parse_related_keywords(raw: dict) -> dict:
                 "related_keywords_sub": item.get("related_keywords") or [],
             })
 
-        # ── Agregaciones para KPIs ────────────────────────────────────────────
         volumes = [k["search_volume"] for k in keywords if k["search_volume"]]
         cpcs = [k["cpc"] for k in keywords if k["cpc"]]
-        difficulties = [
-            k["keyword_difficulty"] for k in keywords
-            if k["keyword_difficulty"] is not None
-        ]
+        difficulties = [k["keyword_difficulty"] for k in keywords if k["keyword_difficulty"] is not None]
 
         intent_dist = Counter(k["main_intent"] for k in keywords if k["main_intent"])
         comp_dist = Counter(k["competition_level"] for k in keywords if k["competition_level"])
         depth_dist = Counter(k["depth"] for k in keywords if k["depth"] is not None)
 
-        # Difficulty buckets
         diff_buckets = {"easy": 0, "medium": 0, "hard": 0, "very_hard": 0}
         for d in difficulties:
-            if d <= 30:
-                diff_buckets["easy"] += 1
-            elif d <= 50:
-                diff_buckets["medium"] += 1
-            elif d <= 70:
-                diff_buckets["hard"] += 1
-            else:
-                diff_buckets["very_hard"] += 1
+            if d <= 30:    diff_buckets["easy"] += 1
+            elif d <= 50:  diff_buckets["medium"] += 1
+            elif d <= 70:  diff_buckets["hard"] += 1
+            else:          diff_buckets["very_hard"] += 1
 
-        # Top categorías (Google Ads category IDs)
         all_categories = []
         for k in keywords:
             all_categories.extend(k["categories"] or [])
@@ -743,14 +652,11 @@ def _parse_related_keywords(raw: dict) -> dict:
             for cat, count in Counter(all_categories).most_common(10)
         ]
 
-        # Top keywords por volumen
         top_by_volume = sorted(
             [k for k in keywords if k["search_volume"]],
-            key=lambda x: x["search_volume"],
-            reverse=True,
+            key=lambda x: x["search_volume"], reverse=True,
         )[:10]
 
-        # Low-hanging fruit: difficulty <= 40 y volumen >= 100
         low_hanging = sorted(
             [
                 k for k in keywords
@@ -761,7 +667,6 @@ def _parse_related_keywords(raw: dict) -> dict:
             reverse=True,
         )[:10]
 
-        # Volumen mensual agregado (suma de todos los keywords mes a mes)
         monthly_agg: dict[str, int] = {}
         for k in keywords:
             for m in k["monthly_searches"]:
@@ -772,12 +677,8 @@ def _parse_related_keywords(raw: dict) -> dict:
             for k, v in sorted(monthly_agg.items())
         ]
 
-        # Tráfico estimado si rankearas #1 en todas (CTR ~30%)
         estimated_traffic_value = round(
-            sum(
-                (k["search_volume"] or 0) * (k["cpc"] or 0) * 0.3
-                for k in keywords
-            ),
+            sum((k["search_volume"] or 0) * (k["cpc"] or 0) * 0.3 for k in keywords),
             2,
         )
 
@@ -788,31 +689,21 @@ def _parse_related_keywords(raw: dict) -> dict:
             "language_code": result.get("language_code"),
             "total_count": result.get("total_count"),
             "items_count": result.get("items_count"),
-
-            # Tabla principal
             "keywords": keywords,
-
-            # KPIs
             "total_search_volume": sum(volumes),
             "avg_search_volume": int(sum(volumes) / len(volumes)) if volumes else 0,
             "avg_cpc": round(sum(cpcs) / len(cpcs), 2) if cpcs else 0,
             "max_cpc": max(cpcs) if cpcs else 0,
             "avg_difficulty": round(sum(difficulties) / len(difficulties), 1) if difficulties else 0,
             "estimated_traffic_value_usd": estimated_traffic_value,
-
-            # Distribuciones
             "competition_distribution": dict(comp_dist),
             "intent_distribution": dict(intent_dist),
             "depth_distribution": dict(depth_dist),
             "difficulty_buckets": diff_buckets,
-
-            # Top lists
             "top_categories": top_categories,
             "top_keywords_by_volume": top_by_volume,
             "low_hanging_fruit": low_hanging,
             "monthly_aggregated": monthly_aggregated,
-
-            # Operacional
             "cost": task.get("cost"),
             "task_time": task.get("time"),
             "task_status_code": task.get("status_code"),
@@ -830,20 +721,11 @@ def get_search_volume(
     keywords: list[str],
     location_code: int | None = None,
     language_code: str | None = None,
-    sort_by: str = "relevance",       # relevance | search_volume | competition_index | cpc
+    sort_by: str = "relevance",
     search_partners: bool = False,
-    date_from: str | None = None,     # YYYY-MM-DD para volumen histórico
+    date_from: str | None = None,
     date_to: str | None = None,
 ) -> dict:
-    """
-    Volumen exacto de Google Ads para una lista de keywords (hasta 1000).
-
-    Datos directos de Google Ads, no estimaciones. location_code y language_code
-    son opcionales; sin ellos retorna volumen global.
-
-    Returns:
-        dict con métricas por keyword + agregaciones para KPIs.
-    """
     payload: dict = {
         "keywords": keywords,
         "sort_by": sort_by,
@@ -878,7 +760,6 @@ def _parse_search_volume(raw: dict) -> dict:
                 "status_code": task.get("status_code"),
             }
 
-        # En este endpoint, result es una lista plana de keywords (no anidada)
         results = task.get("result") or []
 
         keywords = [
@@ -898,25 +779,20 @@ def _parse_search_volume(raw: dict) -> dict:
             for r in results
         ]
 
-        # ── Agregaciones ──────────────────────────────────────────────────────
         volumes = [k["search_volume"] for k in keywords if k["search_volume"]]
         cpcs = [k["cpc"] for k in keywords if k["cpc"]]
 
         comp_dist = Counter(k["competition"] for k in keywords if k["competition"])
 
-        # Top by volume / CPC
         top_by_volume = sorted(
             [k for k in keywords if k["search_volume"]],
-            key=lambda x: x["search_volume"],
-            reverse=True,
+            key=lambda x: x["search_volume"], reverse=True,
         )[:10]
         top_by_cpc = sorted(
             [k for k in keywords if k["cpc"]],
-            key=lambda x: x["cpc"],
-            reverse=True,
+            key=lambda x: x["cpc"], reverse=True,
         )[:10]
 
-        # Volumen mensual agregado para gráfico de tendencia global
         monthly_agg: dict[str, int] = {}
         for k in keywords:
             for m in k["monthly_searches"]:
@@ -927,10 +803,8 @@ def _parse_search_volume(raw: dict) -> dict:
             for k, v in sorted(monthly_agg.items())
         ]
 
-        # Costo PPC estimado (1 click por keyword al CPC)
         total_ppc_cost_estimate = round(sum(k["cpc"] or 0 for k in keywords), 2)
 
-        # Detección de estacionalidad: keyword con mayor variación mes a mes
         seasonality_scores = []
         for k in keywords:
             ms = [m.get("search_volume", 0) or 0 for m in k["monthly_searches"]]
@@ -947,27 +821,17 @@ def _parse_search_volume(raw: dict) -> dict:
         return {
             "keywords": keywords,
             "keywords_count": len(keywords),
-
-            # KPIs
             "total_search_volume": sum(volumes),
             "avg_search_volume": int(sum(volumes) / len(volumes)) if volumes else 0,
             "avg_cpc": round(sum(cpcs) / len(cpcs), 2) if cpcs else 0,
             "max_cpc": max(cpcs) if cpcs else 0,
             "min_cpc": min(cpcs) if cpcs else 0,
             "total_ppc_cost_estimate_usd": total_ppc_cost_estimate,
-
-            # Distribuciones
             "competition_distribution": dict(comp_dist),
-
-            # Top lists
             "top_keywords_by_volume": top_by_volume,
             "top_keywords_by_cpc": top_by_cpc,
-
-            # Tendencias agregadas
             "monthly_aggregated": monthly_aggregated,
             "most_seasonal_keywords": seasonality_scores[:5],
-
-            # Operacional
             "cost": task.get("cost"),
             "task_time": task.get("time"),
             "task_status_code": task.get("status_code"),
@@ -975,3 +839,106 @@ def _parse_search_volume(raw: dict) -> dict:
 
     except (KeyError, IndexError, TypeError) as exc:
         return {"error": "parse_error", "detail": str(exc)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DATAFORSEO LABS — Categories (taxonomy bootstrap)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_labs_categories() -> dict:
+    """
+    Lista completa de categorías de DataForSEO Labs (~3180 nodos).
+
+    Llamada GRATIS y estable. Es la taxonomía que mapea los IDs numéricos
+    devueltos por get_related_keywords (campo `categories`) a nombres legibles
+    como "Apparel" o "Online Communities". Cachéala en tu DB una vez y
+    refresca cada par de meses.
+
+    Returns:
+        dict con la lista plana, lookup por ID y árbol jerárquico.
+    """
+    response = httpx.get(
+        url=f"{_BASE_URL}/dataforseo_labs/categories",
+        headers=_headers(),
+        timeout=30.0,
+    )
+    response.raise_for_status()
+    return _parse_categories(response.json())
+
+
+def _parse_categories(raw: dict) -> dict:
+    try:
+        task = raw["tasks"][0]
+        if task.get("status_code") != 20000:
+            return {
+                "error": "task_failed",
+                "status_message": task.get("status_message"),
+                "status_code": task.get("status_code"),
+            }
+
+        items = task.get("result") or []
+
+        # Lookup directo: ID → datos
+        by_id: dict[int, dict] = {
+            item["category_code"]: {
+                "name": item.get("category_name"),
+                "parent_id": item.get("category_code_parent"),
+            }
+            for item in items
+            if item.get("category_code") is not None
+        }
+
+        # Construir el árbol jerárquico
+        children_map: dict[int | None, list[dict]] = {}
+        for item in items:
+            parent_id = item.get("category_code_parent")
+            children_map.setdefault(parent_id, []).append(item)
+
+        def _build_node(item: dict) -> dict:
+            return {
+                "category_code": item.get("category_code"),
+                "category_name": item.get("category_name"),
+                "children": [
+                    _build_node(c)
+                    for c in children_map.get(item.get("category_code"), [])
+                ],
+            }
+
+        roots = children_map.get(None, [])
+        tree = [_build_node(r) for r in roots]
+
+        return {
+            "categories_flat": items,
+            "categories_by_id": by_id,
+            "tree": tree,
+            "total_count": len(items),
+            "roots_count": len(roots),
+            "cost": task.get("cost", 0),
+            "task_time": task.get("time"),
+            "task_status_code": task.get("status_code"),
+        }
+
+    except (KeyError, IndexError, TypeError) as exc:
+        return {"error": "parse_error", "detail": str(exc)}
+
+
+def resolve_category_names(
+    category_ids: list[int],
+    categories_by_id: dict,
+) -> list[dict]:
+    """
+    Helper para mapear IDs a nombres legibles en el dashboard.
+
+    Ejemplo de uso:
+        cats = get_labs_categories()  # cachear en DB
+        kw_data = get_related_keywords("seo")
+        for kw in kw_data["keywords"]:
+            named = resolve_category_names(kw["categories"], cats["categories_by_id"])
+    """
+    return [
+        {
+            "category_id": cid,
+            "name": (categories_by_id.get(cid) or {}).get("name") or f"Cat {cid}",
+        }
+        for cid in category_ids
+    ]
