@@ -165,35 +165,65 @@ def derive_performance_score(
 def derive_reputation_score(business_data: dict | None) -> int | None:
     """
     Reputation score basado en datos de Google My Business
-    (Business Data API — pendiente de integración en próximo sprint).
+    (Business Data API → my_business_info).
 
-    Espera un dict con la forma:
-        {"rating": {"value": float, "votes_count": int}}
+    Espera la estructura normalizada por dataforseo._normalize_business_item:
+        {
+            "found": bool,
+            "reviews": {"rating": {"value", "votes_count"}, ...},
+            "status": {"is_claimed", "operating_status"}
+        }
 
     Lógica:
       - Score base = (rating / 5) * 100
-      - Penalización si tiene < 10 reviews (poca confianza)
-      - Penalización menor si < 30 reviews
+      - Penalización × 0.7 si tiene < 10 reviews (poca confianza)
+      - Penalización × 0.85 si tiene < 30 reviews
+      - Penalización × 0.85 si listing no reclamado (owner no responde)
+      - Penalización × 0.3 si negocio cerrado permanentemente
+      - Penalización × 0.6 si negocio cerrado temporalmente
+
+    Returns:
+        int 0-100, o None si no hay datos suficientes para calcular.
     """
     if not business_data or not isinstance(business_data, dict):
         return None
     if "error" in business_data:
         return None
+    if business_data.get("found") is False:
+        return None
 
-    rating_obj = business_data.get("rating") or {}
+    # Soporte para shape legacy (rating directo) y shape nuevo (anidado)
+    reviews = business_data.get("reviews") or {}
+    rating_obj = reviews.get("rating") or business_data.get("rating") or {}
     rating = rating_obj.get("value")
-    review_count = rating_obj.get("votes_count", 0)
+    review_count = rating_obj.get("votes_count", 0) or 0
 
     if rating is None:
         return None
 
-    base_score = int((rating / 5) * 100)
+    base = (rating / 5) * 100
 
+    # Penalización por baja confianza estadística
     if review_count < 10:
-        return int(base_score * 0.7)
-    if review_count < 30:
-        return int(base_score * 0.85)
-    return min(100, base_score)
+        base *= 0.7
+    elif review_count < 30:
+        base *= 0.85
+
+    status = business_data.get("status") or {}
+
+    # Listing no reclamado: el dueño no puede responder reviews ni
+    # actualizar info — señal fuerte de baja madurez digital
+    if status.get("is_claimed") is False:
+        base *= 0.85
+
+    # Estado operacional: cerrado permanente es fatal, temporal es serio
+    operating_status = status.get("operating_status")
+    if operating_status == "closed_permanently":
+        base *= 0.3
+    elif operating_status == "closed_temporarily":
+        base *= 0.6
+
+    return min(100, max(0, int(round(base))))
 
 
 def derive_social_score(social_data: dict | None) -> int | None:

@@ -2,15 +2,22 @@
 Audit engine — orquestador del bucle "Evalúa → Descubre → Alcanza".
 
 Combina los tres skipes en una auditoría completa:
-  - DataForSEO  → SEO técnico, on-page, autoridad de dominio, SERPs, keywords
+  - DataForSEO  → SEO técnico, on-page, autoridad, SERPs, keywords, GMB
   - CrUX        → performance real (Core Web Vitals + tendencia 6 meses)
   - Claude API  → recomendaciones priorizadas y accionables
 
 Síncrono por diseño: invocable desde un Celery worker. Latencia esperada para
-una auditoría completa con 3 keywords de target: ~60-90s.
+una auditoría completa con 3 keywords + GMB: ~70-90s.
 
-Costo aproximado por auditoría completa (sin Business Data): ~$0.05 USD.
-Con Business Data + 5 SERPs: ~$0.15 USD.
+Funciones principales:
+  - run_full_audit(...)     → pilar EVALÚA (auditoría del cliente)
+  - discover_prospects(...) → pilar DESCUBRE (encontrar prospectos)
+
+Costo aproximado:
+  - Auditoría sin Business Data:   ~$0.05 USD
+  - Auditoría con my_business_info: ~$0.06 USD
+  - Auditoría con my_business_info + reviews: ~$0.07 USD
+  - Discovery de 100 prospectos:    ~$0.05 USD
 """
 
 from __future__ import annotations
@@ -28,10 +35,16 @@ from src.services.scoring import (
 logger = logging.getLogger(__name__)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# EVALÚA — Auditoría completa del cliente
+# ═══════════════════════════════════════════════════════════════════════════════
+
 def run_full_audit(
     company_name: str,
     company_domain: str,
     target_keywords: list[str] | None = None,
+    google_business_keyword: str | None = None,
+    fetch_reviews: bool = False,
     location_code: int = 2170,   # Colombia
     language_code: str = "es",
 ) -> dict:
@@ -41,19 +54,28 @@ def run_full_audit(
     Args:
         company_name: nombre comercial visible.
         company_domain: dominio sin protocolo (ej. "miempresa.com.co").
-        target_keywords: keywords a trackear en SERP. Limitado a 5 internamente
-            para controlar costo (~$0.002 USD por keyword).
-        location_code: código de ubicación DataForSEO (2170=CO, 2484=MX, 2840=US).
-        language_code: idioma para SERPs.
+        target_keywords: keywords a trackear en SERP (max 5 internamente).
+        google_business_keyword: identificador GMB. Puede ser:
+            - "cid:194604053573767737" (más preciso)
+            - texto libre tipo "Pizzeria Mario Bogotá"
+            Si es None, reputation_score quedará en None y su peso se
+            redistribuirá entre las dimensiones disponibles.
+        fetch_reviews: si True, también trae las reseñas Google (cuesta
+            +$0.0125 pero mejora dramáticamente las recomendaciones de Claude).
+        location_code: código DataForSEO (2170=CO, 2484=MX, 2840=US).
+        language_code: idioma para SERPs y respuestas.
 
     Returns:
-        dict completo de auditoría — listo para persistir en Firestore o en
-        tu modelo Audit. Estructura:
+        dict completo de auditoría — listo para persistir o para responder
+        del endpoint API. Estructura:
             {
                 company_name, company_domain, started_at, completed_at,
                 duration_seconds, total_cost_usd,
                 scores: {health_score, breakdown, available_dimensions},
-                data: {onpage, domain_rank, crux, crux_history, serps},
+                data: {
+                    onpage, domain_rank, crux, crux_history, serps,
+                    business_info, reviews
+                },
                 recommendations: {executive_summary, top_recommendations, ...}
             }
     """
@@ -97,17 +119,44 @@ def run_full_audit(
         language_code,
     )
 
+    # Business Data — solo si el cliente nos dio un identificador GMB
+    if google_business_keyword:
+        audit["data"]["business_info"] = _safe_call(
+            "business_info",
+            lambda: dataforseo.get_my_business_info(
+                keyword=google_business_keyword,
+                location_code=location_code,
+                language_code=language_code,
+            ),
+        )
+        if fetch_reviews:
+            audit["data"]["reviews"] = _safe_call(
+                "reviews",
+                lambda: dataforseo.get_google_reviews(
+                    keyword=google_business_keyword,
+                    location_code=location_code,
+                    language_code=language_code,
+                    depth=20,
+                ),
+            )
+        else:
+            audit["data"]["reviews"] = None
+    else:
+        audit["data"]["business_info"] = None
+        audit["data"]["reviews"] = None
+
     # ─── 2. SCORING — Sub-scores → health_score ───────────────────────────────
     onpage_data = audit["data"]["onpage"]
     crux_data = audit["data"]["crux"]
+    business_data = audit["data"]["business_info"]
 
     seo_score = _compute_seo_score(onpage_data)
     sub_scores = derive_subscores(
         seo_score=seo_score,
         crux_data=crux_data,
         onpage_data=onpage_data,
-        business_data=None,   # TODO Phase 2: integrar Business Data API
-        social_data=None,     # TODO Phase 2+: integrar APIs sociales
+        business_data=business_data,
+        social_data=None,   # TODO Phase 2+: integrar APIs sociales
     )
 
     health: HealthScoreResult = calculate_health_score(sub_scores)
@@ -130,6 +179,8 @@ def run_full_audit(
                 "domain_rank": audit["data"]["domain_rank"],
                 "crux": crux_data,
                 "serps": _summarize_serps_for_prompt(audit["data"]["serps"]),
+                "business": _strip_business_for_prompt(business_data),
+                "reviews": _strip_reviews_for_prompt(audit["data"]["reviews"]),
             },
         ),
     )
@@ -141,6 +192,89 @@ def run_full_audit(
     audit["total_cost_usd"] = _sum_costs(audit["data"])
 
     return audit
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DESCUBRE — Búsqueda de prospectos calificados
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def discover_prospects(
+    *,
+    categories: list[str] | None = None,
+    description: str | None = None,
+    location_coordinate: str | None = None,    # "lat,lng,radius_km"
+    location_country: str | None = None,
+    only_unclaimed: bool = False,
+    min_rating: float | None = 3.0,
+    max_rating: float | None = 4.7,
+    min_reviews: int = 5,
+    limit: int = 100,
+) -> dict:
+    """
+    Pilar 'Descubre' — encuentra negocios calificados como prospectos para
+    Growth Radar.
+
+    Filtros razonados:
+      - min_rating 3.0 / max_rating 4.7: el sweet spot de "negocio activo
+        que está dispuesto a invertir en mejorar". <3.0 es probablemente
+        zombie; >4.7 ya no necesita Growth Radar.
+      - min_reviews 5: excluye negocios sin tracción.
+      - only_unclaimed: TRUE filtra solo listings sin reclamar (alta
+        oportunidad de outreach: "tu listing está abandonado").
+
+    Returns:
+        dict con prospectos rankeados por opportunity_score desc, agregaciones
+        y metadata. Listo para alimentar el dashboard de Descubre.
+    """
+    started_at = datetime.now(timezone.utc)
+
+    # Construimos filtros para el endpoint de DataForSEO
+    df_filters = []
+    if min_rating is not None:
+        df_filters.append(["rating.value", ">=", min_rating])
+    if max_rating is not None:
+        df_filters.append(["rating.value", "<=", max_rating])
+    if min_reviews:
+        df_filters.append(["rating.votes_count", ">=", min_reviews])
+
+    is_claimed_filter = False if only_unclaimed else None
+
+    listings = _safe_call(
+        "business_listings_search",
+        lambda: dataforseo.get_business_listings_search(
+            categories=categories,
+            description=description,
+            is_claimed=is_claimed_filter,
+            location_coordinate=location_coordinate,
+            location_country=location_country,
+            limit=limit,
+            order_by=["rating.value,desc"],
+            filters=df_filters if df_filters else None,
+        ),
+    )
+
+    completed_at = datetime.now(timezone.utc)
+
+    return {
+        "started_at": started_at.isoformat(),
+        "completed_at": completed_at.isoformat(),
+        "duration_seconds": round((completed_at - started_at).total_seconds(), 2),
+        "filters_applied": {
+            "categories": categories,
+            "description": description,
+            "location_coordinate": location_coordinate,
+            "location_country": location_country,
+            "only_unclaimed": only_unclaimed,
+            "min_rating": min_rating,
+            "max_rating": max_rating,
+            "min_reviews": min_reviews,
+            "limit": limit,
+        },
+        "result": listings,
+        "total_cost_usd": (
+            listings.get("cost") if isinstance(listings, dict) else 0
+        ) or 0,
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -213,14 +347,9 @@ def _run_serps(
 
 
 def _strip_for_prompt(onpage_data: dict | None) -> dict | None:
-    """
-    Reduce el onpage data a lo esencial para el prompt de Claude.
-    Eliminamos campos verbosos que solo sirven al frontend (raw_checks,
-    headings completos, social_media_tags) para no quemar tokens.
-    """
+    """Reduce onpage data a lo esencial para el prompt de Claude."""
     if not onpage_data or "error" in onpage_data:
         return onpage_data
-
     keep = {
         "url", "status_code", "title", "title_length", "description",
         "description_length", "h1_text", "canonical", "is_https",
@@ -239,17 +368,14 @@ def _summarize_serps_for_prompt(serps: list[dict]) -> list[dict]:
     for s in serps:
         if not isinstance(s, dict) or "error" in s:
             continue
-
         target = s.get("target_visibility") or {}
         client_domain_norm = (target.get("domain") or "").replace("www.", "").lower()
-
         ai_overview = s.get("ai_overview") or {}
         ai_refs = ai_overview.get("references") or []
         ai_mentions_client = bool(client_domain_norm) and any(
             (ref.get("domain") or "").replace("www.", "").lower() == client_domain_norm
             for ref in ai_refs
         )
-
         summary.append({
             "keyword": s.get("keyword"),
             "average_position_serp": s.get("average_position"),
@@ -262,6 +388,85 @@ def _summarize_serps_for_prompt(serps: list[dict]) -> list[dict]:
             "serp_features": s.get("serp_features", []),
         })
     return summary
+
+
+def _strip_business_for_prompt(business_data: dict | None) -> dict | None:
+    """
+    Compacta business_info para Claude. Mantenemos las señales que más
+    impactan recomendaciones: claim status, completeness, place_topics
+    (qué dicen los clientes), rating, gaps.
+    """
+    if not business_data or not isinstance(business_data, dict):
+        return None
+    if "error" in business_data or business_data.get("found") is False:
+        return business_data
+
+    return {
+        "name": business_data.get("name"),
+        "description": business_data.get("description"),
+        "category": business_data.get("category"),
+        "contact": business_data.get("contact"),
+        "location": {
+            "city": (business_data.get("location") or {}).get("city"),
+            "country_code": (business_data.get("location") or {}).get("country_code"),
+        },
+        "media": business_data.get("media"),
+        "status": business_data.get("status"),
+        "reviews": {
+            "rating": (business_data.get("reviews") or {}).get("rating"),
+            "rating_distribution_pct": (
+                (business_data.get("reviews") or {}).get("rating_distribution_pct")
+            ),
+            "place_topics_top10": (
+                (business_data.get("reviews") or {}).get("place_topics") or []
+            )[:10],
+        },
+        "profile_completeness": business_data.get("profile_completeness"),
+    }
+
+
+def _strip_reviews_for_prompt(reviews_data: dict | None) -> dict | None:
+    """
+    Compacta reviews para Claude — solo le pasamos las negativas y las más
+    recientes con texto. Es donde está la señal de mejora.
+    """
+    if not reviews_data or not isinstance(reviews_data, dict):
+        return None
+    if "error" in reviews_data:
+        return reviews_data
+
+    all_reviews = reviews_data.get("reviews") or []
+
+    # Reviews negativas con texto (donde están las quejas accionables)
+    negative_with_text = [
+        {
+            "rating": r.get("rating"),
+            "text": (r.get("review_text") or "")[:500],
+            "owner_responded": r.get("owner_responded"),
+            "datetime": r.get("datetime_iso") or r.get("timestamp"),
+        }
+        for r in all_reviews
+        if r.get("rating") is not None and r.get("rating") <= 3 and r.get("review_text")
+    ][:8]
+
+    # 5 reviews más recientes con texto (cualquier rating)
+    recent = [
+        {
+            "rating": r.get("rating"),
+            "text": (r.get("review_text") or "")[:300],
+            "owner_responded": r.get("owner_responded"),
+            "datetime": r.get("datetime_iso") or r.get("timestamp"),
+        }
+        for r in all_reviews if r.get("review_text")
+    ][:5]
+
+    return {
+        "avg_rating_in_sample": reviews_data.get("avg_rating_in_sample"),
+        "owner_response_rate": reviews_data.get("owner_response_rate"),
+        "negative_reviews_count": reviews_data.get("negative_reviews_count"),
+        "negative_reviews_with_text": negative_with_text,
+        "recent_reviews": recent,
+    }
 
 
 def _sum_costs(data: dict) -> float:

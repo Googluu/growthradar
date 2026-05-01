@@ -8,6 +8,10 @@ Endpoints integrados:
   - dataforseo_labs/google/related_keywords/live             → keyword research (~0.4s)
   - keywords_data/google_ads/search_volume/live              → volumen Google Ads exacto
   - dataforseo_labs/categories                               → taxonomía Labs (gratis, una vez)
+  - business_data/google/my_business_info/live               → perfil GMB del cliente (~1s)
+  - business_data/google/reviews/live                        → reseñas Google (~3s)
+  - business_data/business_listings/search/live              → discovery de prospectos (~5s)
+  - business_data/business_listings/categories               → taxonomía de negocios (gratis)
 
 Cada parser devuelve campos normalizados listos para alimentar el dashboard.
 El contrato de error es uniforme: dict con "error" cuando algo falla.
@@ -942,3 +946,622 @@ def resolve_category_names(
         }
         for cid in category_ids
     ]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUSINESS DATA — Helpers compartidos
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# Los endpoints my_business_info y business_listings/search devuelven items
+# con la misma estructura de "negocio Google". Centralizamos la normalización.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Pesos de cada campo en el cálculo de profile_completeness (suman 100)
+_PROFILE_COMPLETENESS_CHECKS: list[tuple[str, int, str]] = [
+    # (nombre_campo, peso, etiqueta_es)
+    ("description",            10, "Descripción del negocio"),
+    ("website",                15, "Sitio web vinculado"),
+    ("logo",                   10, "Logo subido"),
+    ("main_image",              5, "Imagen principal"),
+    ("phone",                  10, "Teléfono"),
+    ("photos",                 10, "5+ fotos"),
+    ("claimed",                15, "Listing reclamado"),
+    ("attributes",              5, "Atributos (servicios/opciones)"),
+    ("place_topics",            5, "Temas mencionados en reviews"),
+    ("rating",                 10, "10+ reseñas"),
+    ("additional_categories",   5, "Categorías secundarias"),
+]
+
+
+def _normalize_operating_status(work_time: dict | None) -> str:
+    """
+    Normaliza el campo work_time → estado operativo.
+
+    Returns:
+        'open' | 'closed_permanently' | 'closed_temporarily' | 'unknown'
+    """
+    if not work_time:
+        return "unknown"
+    raw = (work_time.get("work_hours") or {}).get("current_status")
+    if not raw:
+        return "open"  # asumimos abierto si Google no flagea otra cosa
+    if raw in ("closed_forever", "permanently_closed"):
+        return "closed_permanently"
+    if raw == "closed_temporarily":
+        return "closed_temporarily"
+    if raw in ("open", "open_now", "opens_soon", "closes_soon"):
+        return "open"
+    return raw
+
+
+def _compute_profile_completeness(item: dict) -> dict:
+    """
+    Evalúa qué tan completo está el perfil de Google Business.
+    Score 0-100 + listas de campos missing/present con etiquetas en español.
+    """
+    rating = item.get("rating") or {}
+    attrs = item.get("attributes") or {}
+    available_attrs = attrs.get("available_attributes")
+
+    field_checks = {
+        "description":            bool(item.get("description")),
+        "website":                bool(item.get("url") or item.get("domain")),
+        "logo":                   bool(item.get("logo")),
+        "main_image":             bool(item.get("main_image")),
+        "phone":                  bool(item.get("phone")),
+        "photos":                 (item.get("total_photos") or 0) >= 5,
+        "claimed":                item.get("is_claimed") is True,
+        "attributes":             bool(available_attrs),
+        "place_topics":           bool(item.get("place_topics")),
+        "rating":                 (rating.get("votes_count") or 0) >= 10,
+        "additional_categories":  bool(item.get("additional_categories")),
+    }
+
+    score = 0
+    missing = []
+    present = []
+    for field_name, weight, label in _PROFILE_COMPLETENESS_CHECKS:
+        if field_checks.get(field_name):
+            score += weight
+            present.append({"field": field_name, "label": label, "weight": weight})
+        else:
+            missing.append({"field": field_name, "label": label, "weight": weight})
+
+    return {
+        "score": score,
+        "missing": missing,
+        "present": present,
+    }
+
+
+def _compute_opportunity_score(item: dict, completeness: dict) -> dict:
+    """
+    Score 0-100 indicando qué tan buen prospecto es este negocio para
+    Growth Radar. Filosofía:
+      - Negocio activo (con reviews) + perfil incompleto = alta oportunidad
+      - Negocio cerrado = sin oportunidad
+      - Negocio sin tracción (pocas reviews) = baja oportunidad
+      - Rating en sweet spot 3.0-4.5 = motivado para mejorar
+    """
+    operating = _normalize_operating_status(item.get("work_time"))
+    if operating == "closed_permanently":
+        return {"score": 0, "reason": "business_closed", "weakness_signals": []}
+
+    rating_obj = item.get("rating") or {}
+    review_count = rating_obj.get("votes_count") or 0
+    rating_value = rating_obj.get("value") or 0
+
+    if review_count < 5:
+        return {"score": 10, "reason": "no_traction", "weakness_signals": []}
+
+    base = 100 - completeness["score"]
+
+    if 3.0 <= rating_value <= 4.5:
+        base += 10
+    if review_count >= 30:
+        base += 5
+    if operating == "closed_temporarily":
+        base -= 30
+
+    return {
+        "score": max(0, min(100, base)),
+        "weakness_signals": [m["field"] for m in completeness["missing"]],
+    }
+
+
+def _normalize_business_item(item: dict, *, with_opportunity: bool = False) -> dict:
+    """
+    Normaliza un item Google Business Data a estructura plana y consistente.
+    Compartido por my_business_info y business_listings/search.
+
+    Args:
+        with_opportunity: si True, incluye opportunity_score (para discovery).
+    """
+    address_info = item.get("address_info") or {}
+    rating = item.get("rating") or {}
+    rating_distribution = item.get("rating_distribution") or {}
+    place_topics_raw = item.get("place_topics") or {}
+    attributes = item.get("attributes") or {}
+
+    # Computar % de cada calificación 1-5
+    total_votes = sum(rating_distribution.values()) if rating_distribution else 0
+    rating_distribution_pct = {}
+    if total_votes > 0:
+        rating_distribution_pct = {
+            star: round(count / total_votes * 100, 1)
+            for star, count in rating_distribution.items()
+        }
+
+    # Place topics → lista ordenada por menciones desc
+    place_topics = sorted(
+        [{"topic": topic, "mentions": count} for topic, count in place_topics_raw.items()],
+        key=lambda x: x["mentions"],
+        reverse=True,
+    )
+
+    name = item.get("title")
+    original_name = item.get("original_title")
+    is_renamed = bool(original_name and original_name != name)
+
+    completeness = _compute_profile_completeness(item)
+    operating_status = _normalize_operating_status(item.get("work_time"))
+
+    normalized = {
+        "name": name,
+        "original_name": original_name if is_renamed else None,
+        "is_renamed": is_renamed,
+        "description": item.get("description"),
+
+        "category": {
+            "primary": item.get("category"),
+            "ids": item.get("category_ids") or [],
+            "additional": item.get("additional_categories") or [],
+        },
+
+        "ids": {
+            "cid": item.get("cid"),
+            "place_id": item.get("place_id"),
+            "feature_id": item.get("feature_id"),
+        },
+
+        "contact": {
+            "phone": item.get("phone"),
+            "website_url": item.get("url"),
+            "domain": item.get("domain"),
+            "contact_url": item.get("contact_url"),
+            "book_online_url": item.get("book_online_url"),
+            "contributor_url": item.get("contributor_url"),
+        },
+
+        "location": {
+            "address": item.get("address"),
+            "borough": address_info.get("borough"),
+            "street": address_info.get("address"),
+            "city": address_info.get("city"),
+            "zip": address_info.get("zip"),
+            "region": address_info.get("region"),
+            "country_code": address_info.get("country_code"),
+            "latitude": item.get("latitude"),
+            "longitude": item.get("longitude"),
+        },
+
+        "media": {
+            "logo_url": item.get("logo"),
+            "main_image_url": item.get("main_image"),
+            "total_photos": item.get("total_photos") or 0,
+        },
+
+        "status": {
+            "is_claimed": item.get("is_claimed", False),
+            "operating_status": operating_status,
+            "current_status_raw": (
+                (item.get("work_time") or {}).get("work_hours", {}).get("current_status")
+            ),
+            "price_level": item.get("price_level"),
+            "is_directory_item": item.get("is_directory_item", False),
+        },
+
+        "reviews": {
+            "rating": {
+                "value": rating.get("value"),
+                "votes_count": rating.get("votes_count") or 0,
+                "type": rating.get("rating_type"),
+                "max": rating.get("rating_max"),
+            },
+            "rating_distribution": rating_distribution,
+            "rating_distribution_pct": rating_distribution_pct,
+            "place_topics": place_topics,
+            "questions_and_answers_count": item.get("questions_and_answers_count"),
+        },
+
+        "attributes": {
+            "available": attributes.get("available_attributes"),
+            "unavailable": attributes.get("unavailable_attributes"),
+        },
+
+        "popular_times": item.get("popular_times"),
+        "rank_absolute": item.get("rank_absolute"),
+        "profile_completeness": completeness,
+    }
+
+    if with_opportunity:
+        normalized["opportunity_score"] = _compute_opportunity_score(item, completeness)
+
+    return normalized
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUSINESS DATA — Google My Business Info
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_my_business_info(
+    keyword: str,
+    location_code: int = 2170,    # Colombia
+    language_code: str = "es",
+) -> dict:
+    """
+    Trae el perfil de Google Business del cliente.
+
+    Args:
+        keyword: identificador del negocio. Puede ser:
+            - "cid:194604053573767737" (más preciso, recomendado)
+            - texto libre tipo "Pizzeria Mario Bogotá"
+        location_code: ubicación (2170=CO, 2484=MX, 2840=US).
+        language_code: idioma de la respuesta.
+
+    Returns:
+        dict normalizado del negocio. Si no hay match, devuelve
+        {"found": False, "keyword": ..., ...}. Incluye 'error' si la
+        llamada o el parseo falla.
+    """
+    response = httpx.post(
+        url=f"{_BASE_URL}/business_data/google/my_business_info/live",
+        headers=_headers(),
+        json=[{
+            "keyword": keyword,
+            "location_code": location_code,
+            "language_code": language_code,
+        }],
+        timeout=30.0,
+    )
+    response.raise_for_status()
+    return _parse_my_business_info(response.json())
+
+
+def _parse_my_business_info(raw: dict) -> dict:
+    try:
+        task = raw["tasks"][0]
+        if task.get("status_code") != 20000:
+            return {
+                "error": "task_failed",
+                "status_message": task.get("status_message"),
+                "status_code": task.get("status_code"),
+            }
+
+        result = task["result"][0]
+        items = result.get("items") or []
+
+        base_meta = {
+            "keyword": result.get("keyword"),
+            "check_url": result.get("check_url"),
+            "datetime": result.get("datetime"),
+            "location_code": result.get("location_code"),
+            "language_code": result.get("language_code"),
+            "cost": task.get("cost"),
+            "task_time": task.get("time"),
+            "task_status_code": task.get("status_code"),
+        }
+
+        if not items:
+            return {**base_meta, "found": False}
+
+        normalized = _normalize_business_item(items[0], with_opportunity=False)
+        return {**base_meta, "found": True, **normalized}
+
+    except (KeyError, IndexError, TypeError) as exc:
+        return {"error": "parse_error", "detail": str(exc)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUSINESS DATA — Google Reviews
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_google_reviews(
+    keyword: str,
+    location_code: int = 2170,
+    language_code: str = "es",
+    depth: int = 20,                  # cantidad de reviews (10/20/30/...)
+    sort_by: str = "newest",          # newest | most_relevant | highest_rating | lowest_rating
+) -> dict:
+    """
+    Trae las reseñas de Google del negocio.
+
+    Útil para alimentar a Claude con contexto cualitativo de qué dicen los
+    clientes — esto enriquece dramáticamente la calidad de las recomendaciones
+    de Growth Radar.
+
+    Costo aproximado: $0.0125 por 10 reviews.
+    """
+    response = httpx.post(
+        url=f"{_BASE_URL}/business_data/google/reviews/live",
+        headers=_headers(),
+        json=[{
+            "keyword": keyword,
+            "location_code": location_code,
+            "language_code": language_code,
+            "depth": depth,
+            "sort_by": sort_by,
+        }],
+        timeout=60.0,
+    )
+    response.raise_for_status()
+    return _parse_google_reviews(response.json())
+
+
+def _parse_google_reviews(raw: dict) -> dict:
+    try:
+        task = raw["tasks"][0]
+        if task.get("status_code") != 20000:
+            return {
+                "error": "task_failed",
+                "status_message": task.get("status_message"),
+                "status_code": task.get("status_code"),
+            }
+
+        result = task["result"][0]
+        items = result.get("items") or []
+
+        reviews = []
+        for it in items:
+            owner_answer = it.get("owner_answer")
+            reviews.append({
+                "author_name": it.get("profile_name") or it.get("author_title"),
+                "author_image_url": it.get("profile_image_url"),
+                "rating": (it.get("rating") or {}).get("value"),
+                "review_text": it.get("review_text"),
+                "review_highlights": it.get("review_highlights") or [],
+                "timestamp": it.get("timestamp"),
+                "datetime_iso": it.get("time_descriptor"),
+                "review_url": it.get("review_url"),
+                "owner_responded": bool(owner_answer),
+                "owner_response": owner_answer,
+                "reviews_count_by_author": it.get("reviews_count"),
+                "photos_count_by_author": it.get("photos_count"),
+                "local_guide": it.get("local_guide", False),
+            })
+
+        # Agregaciones para KPIs
+        ratings = [r["rating"] for r in reviews if r["rating"] is not None]
+        responded = [r for r in reviews if r["owner_responded"]]
+        with_text = [r for r in reviews if r["review_text"]]
+
+        rating_dist = Counter(int(r) for r in ratings)
+
+        return {
+            "keyword": result.get("keyword"),
+            "check_url": result.get("check_url"),
+            "datetime": result.get("datetime"),
+            "items_count": result.get("items_count"),
+            "total_count": result.get("total_count"),
+            "reviews": reviews,
+
+            # KPIs
+            "avg_rating_in_sample": (
+                round(sum(ratings) / len(ratings), 2) if ratings else None
+            ),
+            "owner_response_rate": (
+                round(len(responded) / len(reviews) * 100, 1) if reviews else 0
+            ),
+            "reviews_with_text_count": len(with_text),
+            "rating_distribution": dict(rating_dist),
+            "negative_reviews": [
+                r for r in reviews
+                if r["rating"] is not None and r["rating"] <= 2
+            ],
+            "negative_reviews_count": sum(1 for r in ratings if r <= 2),
+
+            "cost": task.get("cost"),
+            "task_time": task.get("time"),
+            "task_status_code": task.get("status_code"),
+        }
+
+    except (KeyError, IndexError, TypeError) as exc:
+        return {"error": "parse_error", "detail": str(exc)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUSINESS DATA — Business Listings Search (pilar "Descubre")
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_business_listings_search(
+    categories: list[str] | None = None,
+    description: str | None = None,
+    title: str | None = None,
+    is_claimed: bool | None = None,
+    location_coordinate: str | None = None,   # "lat,lng,radius_km" ej "4.71,-74.07,10"
+    location_country: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    order_by: list[str] | None = None,
+    filters: list | None = None,
+) -> dict:
+    """
+    Búsqueda de negocios en la base de Business Listings de DataForSEO.
+
+    Esta es la pieza que activa el pilar "Descubre" de Growth Radar:
+    encuentra negocios en la categoría/zona del cliente, filtra los que
+    tienen perfiles incompletos, y devuelve cada prospecto con un
+    opportunity_score listo para rankear y atacar con outreach.
+
+    Args:
+        categories: lista de categorías ej ["italian_restaurant", "barbershop"].
+            Usar IDs del endpoint business_listings/categories.
+        description: keyword libre adicional, ej "pizza".
+        is_claimed: filtrar por reclamado (True) o no reclamado (False).
+            None = ambos.
+        location_coordinate: "lat,lng,radius_km" para búsqueda geográfica.
+        limit: máx 1000 por request.
+        order_by: ej ["rating.value,desc"], ["business_listings.name,asc"].
+        filters: ej [["rating.value", ">=", 3.5]].
+
+    Costo aproximado: $0.05 por 100 listings retornados.
+    """
+    payload: dict = {"limit": limit, "offset": offset}
+    if categories:
+        payload["categories"] = categories
+    if description:
+        payload["description"] = description
+    if title:
+        payload["title"] = title
+    if is_claimed is not None:
+        payload["is_claimed"] = is_claimed
+    if location_coordinate:
+        payload["location_coordinate"] = location_coordinate
+    if location_country:
+        payload["location_country"] = location_country
+    if order_by:
+        payload["order_by"] = order_by
+    if filters:
+        payload["filters"] = filters
+
+    response = httpx.post(
+        url=f"{_BASE_URL}/business_data/business_listings/search/live",
+        headers=_headers(),
+        json=[payload],
+        timeout=60.0,
+    )
+    response.raise_for_status()
+    return _parse_business_listings_search(response.json())
+
+
+def _parse_business_listings_search(raw: dict) -> dict:
+    try:
+        task = raw["tasks"][0]
+        if task.get("status_code") != 20000:
+            return {
+                "error": "task_failed",
+                "status_message": task.get("status_message"),
+                "status_code": task.get("status_code"),
+            }
+
+        result = task["result"][0]
+        items = result.get("items") or []
+
+        # Normalizar cada listing con opportunity_score incluido
+        prospects = [_normalize_business_item(it, with_opportunity=True) for it in items]
+
+        # Ordenar por opportunity_score desc para que los mejores prospectos
+        # vengan primero en el dashboard de Descubre
+        prospects.sort(
+            key=lambda p: (p.get("opportunity_score") or {}).get("score", 0),
+            reverse=True,
+        )
+
+        # Agregaciones útiles para el dashboard
+        unclaimed_count = sum(
+            1 for p in prospects if p["status"]["is_claimed"] is False
+        )
+        no_website_count = sum(
+            1 for p in prospects if not p["contact"]["website_url"]
+        )
+        operating_dist = Counter(
+            p["status"]["operating_status"] for p in prospects
+        )
+        category_dist = Counter(
+            p["category"]["primary"] for p in prospects if p["category"]["primary"]
+        )
+
+        # Top 20 prospectos de alta oportunidad para el primer scroll del dashboard
+        high_opportunity = [
+            p for p in prospects
+            if (p.get("opportunity_score") or {}).get("score", 0) >= 60
+        ][:20]
+
+        return {
+            "items_count": result.get("items_count"),
+            "total_count": result.get("total_count"),
+            "offset": result.get("offset", 0),
+
+            "prospects": prospects,
+            "high_opportunity": high_opportunity,
+            "high_opportunity_count": len(high_opportunity),
+
+            # Métricas agregadas
+            "unclaimed_count": unclaimed_count,
+            "unclaimed_pct": (
+                round(unclaimed_count / len(prospects) * 100, 1) if prospects else 0
+            ),
+            "no_website_count": no_website_count,
+            "no_website_pct": (
+                round(no_website_count / len(prospects) * 100, 1) if prospects else 0
+            ),
+            "operating_status_distribution": dict(operating_dist),
+            "top_categories": [
+                {"category": cat, "count": cnt}
+                for cat, cnt in category_dist.most_common(10)
+            ],
+
+            "cost": task.get("cost"),
+            "task_time": task.get("time"),
+            "task_status_code": task.get("status_code"),
+        }
+
+    except (KeyError, IndexError, TypeError) as exc:
+        return {"error": "parse_error", "detail": str(exc)}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# BUSINESS DATA — Business Listings Categories (taxonomía de negocios)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def get_business_listings_categories() -> dict:
+    """
+    Lista de categorías de negocios (gratis). Es la taxonomía que aceptan
+    los filtros de business_listings/search/live.
+
+    Devuelve strings tipo "italian_restaurant", "barbershop", etc.
+    Cachear en DB. Refresca cada par de meses.
+    """
+    response = httpx.post(
+        url=f"{_BASE_URL}/business_data/business_listings/categories",
+        headers=_headers(),
+        json=[],
+        timeout=30.0,
+    )
+    response.raise_for_status()
+    return _parse_business_listings_categories(response.json())
+
+
+def _parse_business_listings_categories(raw: dict) -> dict:
+    try:
+        task = raw["tasks"][0]
+        if task.get("status_code") != 20000:
+            return {
+                "error": "task_failed",
+                "status_message": task.get("status_message"),
+                "status_code": task.get("status_code"),
+            }
+
+        result = task.get("result") or []
+
+        # La respuesta puede venir como lista de strings o lista de dicts.
+        # Normalizamos a lista de strings para uso simple en filtros.
+        categories: list[str] = []
+        for entry in result:
+            if isinstance(entry, str):
+                categories.append(entry)
+            elif isinstance(entry, dict):
+                code = entry.get("category") or entry.get("name") or entry.get("category_code")
+                if code:
+                    categories.append(str(code))
+
+        return {
+            "categories": categories,
+            "total_count": len(categories),
+            "cost": task.get("cost", 0),
+            "task_time": task.get("time"),
+            "task_status_code": task.get("status_code"),
+        }
+
+    except (KeyError, IndexError, TypeError) as exc:
+        return {"error": "parse_error", "detail": str(exc)}
