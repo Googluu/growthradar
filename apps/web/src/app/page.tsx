@@ -1,15 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Nav }            from "@/components/landing/Nav";
-import { Hero }           from "@/components/landing/Hero";
-import { ScanOverlay }    from "@/components/landing/ScanOverlay";
-import { PoweredByStrip } from "@/components/landing/PoweredByStrip";
-import { DemoReport }     from "@/components/landing/DemoReport";
-import { HowItWorks }     from "@/components/landing/HowItWorks";
-import { ImpactMetrics }  from "@/components/landing/ImpactMetrics";
-import { FooterCTA }      from "@/components/landing/FooterCTA";
-import { FooterBar }      from "@/components/landing/FooterBar";
+import { LandingNav }        from "@/components/landing/LandingNav";
+import { LandingHero }       from "@/components/landing/LandingHero";
+import { ScanOverlay }       from "@/components/landing/ScanOverlay";
+import { DemoReport }        from "@/components/landing/DemoReport";
+import { Pillars }           from "@/components/landing/Pillars";
+import { LandingHowItWorks } from "@/components/landing/LandingHowItWorks";
+import { FeatureSpotlight }  from "@/components/landing/FeatureSpotlight";
+import { SocialProof }       from "@/components/landing/SocialProof";
+import { Pricing }           from "@/components/landing/Pricing";
+import { FAQ }               from "@/components/landing/FAQ";
+import { FinalCTA }          from "@/components/landing/FinalCTA";
+import { LandingFooter }     from "@/components/landing/LandingFooter";
 import type { AuditResult, CWVMetric, SEOCheck, Recommendation, MetricStatus } from "@/types/audit";
 
 // ── CTA helpers ───────────────────────────────────────────────────────────────
@@ -56,7 +59,6 @@ function fmtEtv(n: number | null | undefined): string {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapBackendResult(raw: any, inputUrl: string): AuditResult {
-  // Core Web Vitals
   const metrics: CWVMetric[] = [];
   const cruxMetrics = raw.crux?.metrics ?? {};
   for (const { key, label } of CWV_MAP) {
@@ -70,7 +72,6 @@ function mapBackendResult(raw: any, inputUrl: string): AuditResult {
     });
   }
 
-  // SEO checks
   const op = raw.seo?.onpage ?? {};
   const checks: SEOCheck[] = [
     { ok: !!op.is_https,             label: "HTTPS activo" },
@@ -80,7 +81,6 @@ function mapBackendResult(raw: any, inputUrl: string): AuditResult {
     { ok: !!op.has_robots_txt,       label: "robots.txt" },
   ];
 
-  // Domain stats
   const dr = raw.seo?.domain_rank;
   const healthScore: number = raw.health_score ?? 50;
   const potential = healthScore >= 70 ? "Alto" : healthScore >= 40 ? "Medio" : "Bajo";
@@ -93,7 +93,6 @@ function mapBackendResult(raw: any, inputUrl: string): AuditResult {
       ]
     : [{ val: potential, lbl: "Potencial" }];
 
-  // Recommendations
   const topRecs = raw.recommendations?.top_recommendations ?? [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recommendations: Recommendation[] = topRecs.map((r: any) => {
@@ -131,7 +130,6 @@ const API_BASE = "http://localhost:8000";
 const POLL_INTERVAL_MS = 4_000;
 const POLL_TIMEOUT_MS  = 120_000;
 
-// Dispara la auditoría; lanza "trial_used" si la IP ya usó su prueba gratuita
 async function triggerAudit(url: string): Promise<string> {
   const res = await fetch(`${API_BASE}/public/audit`, {
     method: "POST",
@@ -163,7 +161,7 @@ async function pollAudit(job_id: string, url: string): Promise<AuditResult> {
 
 // ── Cache localStorage ────────────────────────────────────────────────────────
 const CACHE_KEY = "eda_audit_v1";
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
+const CACHE_TTL = 24 * 60 * 60 * 1000;
 
 function readCache(): AuditResult | null {
   try {
@@ -191,7 +189,6 @@ export default function LandingPage() {
 
   const pendingResult = useRef<AuditResult | null>(null);
 
-  // Restaurar reporte cacheado al montar (persiste el resultado tras refresh)
   useEffect(() => {
     const cached = readCache();
     if (cached) setReportData(cached);
@@ -206,7 +203,6 @@ export default function LandingPage() {
   const handleScan = useCallback(async () => {
     if (!url.trim() || scanning) return;
 
-    // Pre-validar antes de mostrar el overlay — detecta rate-limit sin animar
     let job_id: string;
     try {
       job_id = await triggerAudit(url);
@@ -222,7 +218,6 @@ export default function LandingPage() {
     setAuditReady(false);
     pendingResult.current = null;
 
-    // Lanza el polling en background; cuando resuelve señala al overlay
     pollAudit(job_id, url)
       .then((result) => {
         pendingResult.current = result;
@@ -231,11 +226,10 @@ export default function LandingPage() {
       })
       .catch((err) => {
         console.error("[EDA] Poll error:", err);
-        setAuditReady(true); // cierra el overlay aunque haya error
+        setAuditReady(true);
       });
   }, [url, scanning]);
 
-  // Llamado por ScanOverlay DESPUÉS de su animación de "done" (~0.9s post-ready)
   const handleScanDone = useCallback(() => {
     setScanning(false);
     setAuditReady(false);
@@ -250,21 +244,27 @@ export default function LandingPage() {
     <>
       {scanning && <ScanOverlay url={url} ready={auditReady} onDone={handleScanDone} />}
 
-      <Nav scrolled={navScrolled} onAuditClick={focusHeroInput} />
+      <LandingNav scrolled={navScrolled} onAuditClick={focusHeroInput} />
 
-      <Hero url={url} onUrlChange={setUrl} onScan={handleScan} />
-
-      <PoweredByStrip />
+      <LandingHero url={url} onUrlChange={setUrl} onScan={handleScan} trialExhausted={trialExhausted} />
 
       <DemoReport reportData={reportData} url={url} onUrlChange={setUrl} onScan={handleScan} trialExhausted={trialExhausted} />
 
-      <HowItWorks />
+      <Pillars />
 
-      <ImpactMetrics />
+      <LandingHowItWorks />
 
-      <FooterCTA onAuditClick={focusHeroInput} onDemoClick={scrollToDemo} />
+      <FeatureSpotlight />
 
-      <FooterBar />
+      <SocialProof />
+
+      <Pricing />
+
+      <FAQ />
+
+      <FinalCTA onAuditClick={focusHeroInput} />
+
+      <LandingFooter />
     </>
   );
 }
