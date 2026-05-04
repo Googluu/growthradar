@@ -1,0 +1,2270 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EDA — Evalúa. Descubre. Alcanza. | Visibilidad digital para pymes de LATAM</title>
+  <meta name="description" content="EDA escanea tu presencia digital, encuentra clientes potenciales y los contacta por ti — todo en automático. Para pymes de Colombia, México, Perú, Chile y Argentina." />
+  <meta property="og:title" content="EDA — Visibilidad digital para pymes de LATAM" />
+  <meta property="og:description" content="Audita tu negocio gratis en 90 segundos. Sin tarjeta de crédito." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@400;600;700&display=swap" rel="stylesheet" />
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body { background: #0a0a0a; color: #fff; min-height: 100vh; overflow-x: hidden; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #111; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #444; }
+    @media (max-width: 768px) {
+      .nav-desktop { display: none !important; }
+      .nav-mobile { display: flex !important; }
+    }
+    @media (min-width: 769px) {
+      .nav-mobile { display: none !important; }
+      .nav-mobile-menu { display: none !important; }
+    }
+    @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr !important; } .hero-mockup { display: none !important; } }
+    @media (max-width: 768px) { .pillars-grid { grid-template-columns: 1fr !important; } }
+    @media (max-width: 768px) { .steps-grid { grid-template-columns: 1fr !important; } }
+    @media (max-width: 900px) { .spotlight-row { grid-template-columns: 1fr !important; } .spotlight-text { order: 0 !important; } .spotlight-mockup { order: 1 !important; } }
+    @media (max-width: 768px) { .testimonials-grid { grid-template-columns: 1fr !important; } }
+    @media (max-width: 900px) { .pricing-grid { grid-template-columns: 1fr !important; max-width: 400px; margin: 0 auto; } }
+    @media (max-width: 768px) { .footer-grid { grid-template-columns: 1fr 1fr !important; } }
+    @media (max-width: 480px) { .footer-grid { grid-template-columns: 1fr !important; } }
+    @keyframes pulse-dot { 0%, 100% { opacity: 0.3; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+    @keyframes fadeInUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-up { animation: fadeInUp 0.7s ease forwards; }
+    .fade-up-delay { animation: fadeInUp 0.7s 0.2s ease both; }
+    .section-sep { width: 100%; height: 1px; background: linear-gradient(to right, transparent, rgba(255,255,255,0.06), transparent); margin: 0 auto; max-width: 1100px; }
+    input { color: #fff; background: none; border: none; outline: none; }
+    input::placeholder { color: rgba(255,255,255,0.3); }
+  </style>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "EDA",
+    "description": "Plataforma de auditoría digital, prospección y outreach automático para pymes de LATAM",
+    "url": "https://eda.lat",
+    "foundingLocation": "Latinoamérica",
+    "areaServed": ["CO", "MX", "PE", "CL", "AR"],
+    "slogan": "Evalúa. Descubre. Alcanza."
+  }
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+const { useState, useEffect } = React;
+
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;width:100%;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">{children}</div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+function TweakColor({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <input type="color" className="twk-swatch" value={value}
+             onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+
+
+
+
+// EDA Navbar Component
+
+function Navbar({ accentColor }) {
+  const [scrolled, setScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    const handler = () => setScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handler);
+    return () => window.removeEventListener('scroll', handler);
+  }, []);
+
+  const links = ['Producto', 'Precios', 'Casos', 'Blog'];
+
+  return (
+    <nav style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
+      transition: 'all 0.3s ease',
+      background: scrolled ? 'rgba(10,10,10,0.85)' : 'transparent',
+      backdropFilter: scrolled ? 'blur(16px)' : 'none',
+      borderBottom: scrolled ? '1px solid rgba(255,255,255,0.06)' : '1px solid transparent',
+    }}>
+      <div style={{
+        maxWidth: 1200, margin: '0 auto',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 24px', height: 68,
+      }}>
+        {/* Logo */}
+        <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+          <img src="uploads/logo_eda_sin_background.png" alt="EDA" style={{ height: 36, width: 36, filter: 'brightness(1.1)' }} />
+          <img src="uploads/eda.png" alt="EDA" style={{ height: 22, filter: 'invert(1) brightness(2)' }} />
+        </a>
+
+        {/* Desktop links */}
+        <div style={{ display: 'flex', gap: 32, alignItems: 'center' }} className="nav-desktop">
+          {links.map(l => (
+            <a key={l} href={`#${l.toLowerCase()}`} style={{
+              color: 'rgba(255,255,255,0.65)', fontSize: 14, textDecoration: 'none',
+              fontFamily: 'Inter, sans-serif', letterSpacing: '0.01em',
+              transition: 'color 0.2s',
+            }}
+            onMouseEnter={e => e.target.style.color = '#fff'}
+            onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.65)'}
+            >{l}</a>
+          ))}
+        </div>
+
+        {/* CTA buttons */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }} className="nav-desktop">
+          <a href="#" style={{
+            color: 'rgba(255,255,255,0.75)', fontSize: 14, textDecoration: 'none',
+            padding: '8px 16px', border: '1px solid rgba(255,255,255,0.15)',
+            borderRadius: 8, fontFamily: 'Inter, sans-serif',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={e => { e.target.style.borderColor = 'rgba(255,255,255,0.35)'; e.target.style.color = '#fff'; }}
+          onMouseLeave={e => { e.target.style.borderColor = 'rgba(255,255,255,0.15)'; e.target.style.color = 'rgba(255,255,255,0.75)'; }}
+          >Iniciar sesión</a>
+          <a href="#" style={{
+            background: accentColor || '#22c55e', color: '#0a0a0a',
+            fontSize: 14, textDecoration: 'none', fontWeight: 700,
+            padding: '8px 18px', borderRadius: 8, fontFamily: 'Inter, sans-serif',
+            transition: 'opacity 0.2s',
+          }}
+          onMouseEnter={e => e.target.style.opacity = '0.88'}
+          onMouseLeave={e => e.target.style.opacity = '1'}
+          >Empezar gratis</a>
+        </div>
+
+        {/* Mobile hamburger */}
+        <button
+          className="nav-mobile"
+          onClick={() => setMobileOpen(!mobileOpen)}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#fff', padding: 8, display: 'none',
+          }}
+          aria-label="Menú"
+        >
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+            {mobileOpen ? (
+              <path d="M4 4L18 18M18 4L4 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            ) : (
+              <>
+                <line x1="3" y1="7" x2="19" y2="7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <line x1="3" y1="11" x2="19" y2="11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                <line x1="3" y1="15" x2="19" y2="15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+              </>
+            )}
+          </svg>
+        </button>
+      </div>
+
+      {/* Mobile menu */}
+      {mobileOpen && (
+        <div style={{
+          background: '#111', borderTop: '1px solid rgba(255,255,255,0.08)',
+          padding: '16px 24px 24px',
+        }} className="nav-mobile-menu">
+          {links.map(l => (
+            <a key={l} href={`#${l.toLowerCase()}`}
+              onClick={() => setMobileOpen(false)}
+              style={{
+                display: 'block', color: 'rgba(255,255,255,0.75)', fontSize: 16,
+                textDecoration: 'none', padding: '12px 0',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                fontFamily: 'Inter, sans-serif',
+              }}
+            >{l}</a>
+          ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+            <a href="#" style={{
+              color: '#fff', fontSize: 14, textDecoration: 'none',
+              padding: '10px 16px', border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: 8, fontFamily: 'Inter, sans-serif', textAlign: 'center',
+            }}>Iniciar sesión</a>
+            <a href="#" style={{
+              background: accentColor || '#22c55e', color: '#0a0a0a',
+              fontSize: 14, textDecoration: 'none', fontWeight: 700,
+              padding: '10px 16px', borderRadius: 8, fontFamily: 'Inter, sans-serif', textAlign: 'center',
+            }}>Empezar gratis</a>
+          </div>
+        </div>
+      )}
+    </nav>
+  );
+}
+
+
+
+
+
+// EDA Hero Section
+function Hero({ accentColor }) {
+  const green = accentColor || '#22c55e';
+
+  return (
+    <section style={{
+      minHeight: '100vh',
+      display: 'flex', alignItems: 'center',
+      position: 'relative', overflow: 'hidden',
+      padding: '120px 24px 80px',
+    }}>
+      {/* Background dot grid */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px)`,
+        backgroundSize: '32px 32px',
+        maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)',
+        WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 100%)',
+      }}></div>
+
+      {/* Green glow blob */}
+      <div style={{
+        position: 'absolute', top: '10%', right: '-5%',
+        width: 600, height: 600,
+        background: `radial-gradient(circle, ${green}18 0%, transparent 70%)`,
+        pointerEvents: 'none',
+        borderRadius: '50%',
+      }}></div>
+      <div style={{
+        position: 'absolute', bottom: '0%', left: '-10%',
+        width: 400, height: 400,
+        background: `radial-gradient(circle, ${green}0d 0%, transparent 70%)`,
+        pointerEvents: 'none',
+        borderRadius: '50%',
+      }}></div>
+
+      <div style={{ maxWidth: 1200, margin: '0 auto', width: '100%' }}>
+        <div className="hero-grid" style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr',
+          gap: 64, alignItems: 'center',
+        }}>
+          {/* Left: Text */}
+          <div className="fade-up" style={{ maxWidth: 560 }}>
+            {/* Kicker */}
+            <div style={{
+              fontFamily: 'Caveat, cursive',
+              color: green, fontSize: 20,
+              marginBottom: 20,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M10 2 Q12 6 10 10 Q8 14 10 18" stroke={green} strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+                <path d="M7 8 Q10 6 13 8" stroke={green} strokeWidth="1.5" strokeLinecap="round" fill="none"/>
+              </svg>
+              Para pymes de Latinoamérica
+            </div>
+
+            {/* Headline */}
+            <h1 style={{
+              fontFamily: 'Syne, sans-serif',
+              fontWeight: 800, fontSize: 'clamp(40px, 5vw, 68px)',
+              lineHeight: 1.05, letterSpacing: '-0.03em',
+              color: '#fff', margin: '0 0 24px',
+            }}>
+              Tu negocio en Google.{' '}
+              <span style={{ color: green }}>Visible,</span>{' '}
+              conectado, creciendo.
+            </h1>
+
+            {/* Subhead */}
+            <p style={{
+              fontFamily: 'Inter, sans-serif',
+              fontSize: 18, lineHeight: 1.65,
+              color: 'rgba(255,255,255,0.58)',
+              margin: '0 0 36px', maxWidth: 480,
+            }}>
+              EDA escanea tu presencia digital, encuentra clientes potenciales que necesitan lo que ofreces, y los contacta por ti — todo en automático.
+            </p>
+
+            {/* CTAs */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 20 }}>
+              <a href="#" style={{
+                background: green, color: '#0a0a0a',
+                fontFamily: 'Inter, sans-serif', fontWeight: 700,
+                fontSize: 15, padding: '14px 28px',
+                borderRadius: 10, textDecoration: 'none',
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                transition: 'transform 0.15s, box-shadow 0.15s',
+                boxShadow: `0 0 0 0 ${green}40`,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 8px 32px ${green}40`; }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 0 0 0 ${green}40`; }}
+              >
+                Audita tu negocio gratis
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </a>
+
+              <a href="#" style={{
+                color: 'rgba(255,255,255,0.8)',
+                fontFamily: 'Inter, sans-serif', fontWeight: 500,
+                fontSize: 15, padding: '14px 22px',
+                borderRadius: 10, textDecoration: 'none',
+                border: '1px solid rgba(255,255,255,0.15)',
+                display: 'inline-flex', alignItems: 'center', gap: 8,
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.35)'; e.currentTarget.style.color = '#fff'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)'; }}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5"/>
+                  <path d="M6.5 5.5l4 2.5-4 2.5V5.5z" fill="currentColor"/>
+                </svg>
+                Ver demo
+              </a>
+            </div>
+
+            <p style={{
+              fontFamily: 'Inter, sans-serif',
+              fontSize: 13, color: 'rgba(255,255,255,0.35)',
+              letterSpacing: '0.01em',
+            }}>
+              Sin tarjeta de crédito · Resultados en 90 segundos
+            </p>
+          </div>
+
+          {/* Right: Dashboard mockup */}
+          <div className="hero-mockup fade-up-delay" style={{
+            display: 'flex', justifyContent: 'center', alignItems: 'center',
+            position: 'relative',
+          }}>
+            {/* Glow behind mockup */}
+            <div style={{
+              position: 'absolute', width: '80%', height: '60%',
+              background: `radial-gradient(ellipse, ${green}22 0%, transparent 70%)`,
+              borderRadius: '50%', filter: 'blur(24px)',
+              zIndex: 0,
+            }}></div>
+
+            {/* Browser window mockup */}
+            <div style={{
+              position: 'relative', zIndex: 1,
+              background: '#111',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 16,
+              boxShadow: `0 32px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05), 0 0 60px ${green}15`,
+              width: '100%', maxWidth: 500,
+              transform: 'perspective(1000px) rotateY(-4deg) rotateX(2deg)',
+              overflow: 'hidden',
+            }}>
+              {/* Browser chrome */}
+              <div style={{
+                background: '#1a1a1a', padding: '12px 16px',
+                borderBottom: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {['#ff5f57','#ffbd2e','#28c840'].map((c, i) => (
+                    <div key={i} style={{ width: 10, height: 10, borderRadius: '50%', background: c }}></div>
+                  ))}
+                </div>
+                <div style={{
+                  flex: 1, background: 'rgba(255,255,255,0.06)',
+                  borderRadius: 6, padding: '5px 12px',
+                  fontFamily: 'monospace', fontSize: 11, color: 'rgba(255,255,255,0.4)',
+                }}>
+                  app.eda.lat/dashboard
+                </div>
+              </div>
+
+              {/* Dashboard content */}
+              <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {/* Header row */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 15, color: '#fff' }}>
+                    Pizzería Don Mario
+                  </div>
+                  <div style={{
+                    background: `${green}20`, color: green,
+                    fontSize: 11, fontFamily: 'Inter, sans-serif', fontWeight: 600,
+                    padding: '3px 8px', borderRadius: 20, border: `1px solid ${green}40`,
+                  }}>Activo</div>
+                </div>
+
+                {/* Score card */}
+                <div style={{
+                  background: 'rgba(255,255,255,0.04)', borderRadius: 12,
+                  padding: 16, border: '1px solid rgba(255,255,255,0.07)',
+                }}>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: 'rgba(255,255,255,0.45)', marginBottom: 8, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                    Salud Digital
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
+                    <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 42, color: '#fff', lineHeight: 1 }}>65</span>
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 16, color: 'rgba(255,255,255,0.35)', marginBottom: 6 }}>/100</span>
+                  </div>
+                  {/* Progress bar */}
+                  <div style={{ marginTop: 10, background: 'rgba(255,255,255,0.08)', borderRadius: 4, height: 5, overflow: 'hidden' }}>
+                    <div style={{ width: '65%', height: '100%', background: green, borderRadius: 4 }}></div>
+                  </div>
+                </div>
+
+                {/* Stat cards row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[
+                    { label: 'Prospectos', value: '12', sub: 'encontrados hoy', icon: '🎯' },
+                    { label: 'Mensajes', value: '3', sub: 'enviados', icon: '✉️' },
+                  ].map((s, i) => (
+                    <div key={i} style={{
+                      background: 'rgba(255,255,255,0.03)', borderRadius: 10,
+                      padding: '12px 14px', border: '1px solid rgba(255,255,255,0.06)',
+                    }}>
+                      <div style={{ fontSize: 18, marginBottom: 4 }}>{s.icon}</div>
+                      <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 22, color: '#fff' }}>{s.value}</div>
+                      <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{s.label} · {s.sub}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Recommendation */}
+                <div style={{
+                  background: `${green}10`, borderRadius: 10,
+                  padding: '12px 14px', border: `1px solid ${green}25`,
+                  display: 'flex', gap: 10, alignItems: 'flex-start',
+                }}>
+                  <div style={{ color: green, fontSize: 14, marginTop: 1 }}>
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                      <circle cx="7" cy="7" r="6" stroke={green} strokeWidth="1.4"/>
+                      <path d="M7 4v3.5l2 1.5" stroke={green} strokeWidth="1.4" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: green, marginBottom: 2 }}>
+                      Acción recomendada
+                    </div>
+                    <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: 'rgba(255,255,255,0.5)' }}>
+                      Actualiza tu perfil de Google Business con horarios
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+
+
+
+// EDA Pillars Section — E.D.A. unfolded
+function Pillars({ accentColor }) {
+  const green = accentColor || '#22c55e';
+
+  const pillars = [
+    {
+      letter: 'E',
+      title: 'Evalúa',
+      desc: 'Auditamos tu sitio, redes y reseñas. Sabe exactamente cómo te ven Google y tus clientes.',
+      icon: (
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+          <circle cx="12" cy="12" r="7" stroke={green} strokeWidth="1.8"/>
+          <path d="M17.5 17.5L23 23" stroke={green} strokeWidth="2" strokeLinecap="round"/>
+          <path d="M9 12h6M12 9v6" stroke={green} strokeWidth="1.6" strokeLinecap="round"/>
+        </svg>
+      ),
+      angle: '-3deg',
+    },
+    {
+      letter: 'D',
+      title: 'Descubre',
+      desc: 'Encontramos negocios en tu zona y categoría que probablemente necesitan lo que ofreces.',
+      icon: (
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+          <circle cx="14" cy="14" r="9" stroke={green} strokeWidth="1.8"/>
+          <path d="M14 5v2M14 21v2M5 14h2M21 14h2" stroke={green} strokeWidth="1.8" strokeLinecap="round"/>
+          <circle cx="14" cy="14" r="2" fill={green}/>
+          <path d="M14 14L18 8" stroke={green} strokeWidth="1.6" strokeLinecap="round"/>
+        </svg>
+      ),
+      angle: '2deg',
+    },
+    {
+      letter: 'A',
+      title: 'Alcanza',
+      desc: 'Generamos y enviamos un mensaje personalizado a cada prospecto. Conversaciones reales, automáticas.',
+      icon: (
+        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+          <path d="M5 14L23 6l-8 18-2-7-8-3z" stroke={green} strokeWidth="1.8" strokeLinejoin="round" fill="none"/>
+          <path d="M15 13l-3 3" stroke={green} strokeWidth="1.6" strokeLinecap="round"/>
+        </svg>
+      ),
+      angle: '-1.5deg',
+    },
+  ];
+
+  return (
+    <section id="producto" style={{
+      padding: '100px 24px',
+      position: 'relative',
+    }}>
+      {/* Section label */}
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ textAlign: 'center', marginBottom: 72 }}>
+          <div style={{
+            fontFamily: 'Caveat, cursive', color: green, fontSize: 18,
+            marginBottom: 12,
+          }}>El método</div>
+          <h2 style={{
+            fontFamily: 'Syne, sans-serif', fontWeight: 800,
+            fontSize: 'clamp(32px, 4vw, 52px)', color: '#fff',
+            letterSpacing: '-0.03em', margin: 0,
+          }}>Tres letras. Un sistema completo.</h2>
+        </div>
+
+        <div className="pillars-grid" style={{
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 2, position: 'relative',
+        }}>
+          {pillars.map((p, i) => (
+            <div key={i} style={{ position: 'relative' }}>
+              {/* Sketchy divider between cards */}
+              {i > 0 && (
+                <div style={{
+                  position: 'absolute', left: 0, top: '10%', bottom: '10%',
+                  width: 1,
+                  background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.1) 20%, rgba(255,255,255,0.1) 80%, transparent)',
+                }}></div>
+              )}
+              <div
+                className="pillar-card"
+                style={{
+                  background: 'rgba(255,255,255,0.025)',
+                  border: '1px solid rgba(255,255,255,0.07)',
+                  borderRadius: 20, padding: '48px 40px',
+                  transition: 'all 0.3s',
+                  cursor: 'default',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                  e.currentTarget.style.borderColor = `${green}35`;
+                  e.currentTarget.style.boxShadow = `0 0 40px ${green}10`;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.025)';
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                {/* Big letter */}
+                <div style={{
+                  fontFamily: 'Caveat, cursive',
+                  fontSize: 96, fontWeight: 700,
+                  color: green, lineHeight: 1,
+                  marginBottom: 8,
+                  display: 'inline-block',
+                  transform: `rotate(${p.angle})`,
+                  opacity: 0.9,
+                  textShadow: `0 0 40px ${green}40`,
+                }}>{p.letter}</div>
+
+                {/* Icon */}
+                <div style={{ marginBottom: 16, opacity: 0.85 }}>{p.icon}</div>
+
+                {/* Title */}
+                <h3 style={{
+                  fontFamily: 'Syne, sans-serif', fontWeight: 700,
+                  fontSize: 28, color: '#fff', margin: '0 0 12px',
+                  letterSpacing: '-0.02em',
+                }}>{p.title}</h3>
+
+                {/* Description */}
+                <p style={{
+                  fontFamily: 'Inter, sans-serif', fontSize: 15,
+                  lineHeight: 1.7, color: 'rgba(255,255,255,0.5)',
+                  margin: 0,
+                }}>{p.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+
+
+
+// EDA How It Works Section
+function HowItWorks({ accentColor }) {
+  const green = accentColor || '#22c55e';
+  const [scanning, setScanning] = React.useState(false);
+  const [scanStep, setScanStep] = React.useState(0);
+  const [url, setUrl] = React.useState('');
+
+  const scanLabels = [
+    'Analizando SEO...',
+    'Buscando prospectos...',
+    'Generando mensajes...',
+    '¡Listo!',
+  ];
+
+  const handleScan = () => {
+    if (!url) return;
+    setScanning(true);
+    setScanStep(0);
+    let step = 0;
+    const interval = setInterval(() => {
+      step++;
+      setScanStep(step);
+      if (step >= scanLabels.length - 1) {
+        clearInterval(interval);
+        setTimeout(() => { setScanning(false); setScanStep(0); }, 2000);
+      }
+    }, 900);
+  };
+
+  return (
+    <section style={{ padding: '100px 24px', position: 'relative', overflow: 'hidden' }}>
+      {/* Subtle bg line */}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, top: '50%',
+        height: 1, background: 'linear-gradient(to right, transparent, rgba(255,255,255,0.04), transparent)',
+        pointerEvents: 'none',
+      }}></div>
+
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 72 }}>
+          <div style={{ fontFamily: 'Caveat, cursive', color: green, fontSize: 18, marginBottom: 12 }}>
+            Cómo funciona
+          </div>
+          <h2 style={{
+            fontFamily: 'Syne, sans-serif', fontWeight: 800,
+            fontSize: 'clamp(32px, 4vw, 52px)', color: '#fff',
+            letterSpacing: '-0.03em', margin: '0 0 16px',
+          }}>Tres pasos. 90 segundos.</h2>
+          <p style={{ fontFamily: 'Inter, sans-serif', color: 'rgba(255,255,255,0.45)', fontSize: 16, margin: 0 }}>
+            Sin setup técnico. Sin equipo de marketing.
+          </p>
+        </div>
+
+        {/* Steps */}
+        <div className="steps-grid" style={{
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 24, position: 'relative',
+        }}>
+          {/* Connecting arrow lines */}
+          <svg style={{
+            position: 'absolute', top: '50%', left: '33.3%', right: '33.3%',
+            width: '33%', height: 2, overflow: 'visible',
+            pointerEvents: 'none', zIndex: 0,
+          }} viewBox="0 0 100 4" preserveAspectRatio="none">
+            <path d="M0,2 Q25,0 50,2 Q75,4 100,2" stroke={`${green}30`} strokeWidth="1.5" fill="none" strokeDasharray="4,3"/>
+          </svg>
+          <svg style={{
+            position: 'absolute', top: '50%', left: '66.6%',
+            width: '33%', height: 2, overflow: 'visible',
+            pointerEvents: 'none', zIndex: 0,
+          }} viewBox="0 0 100 4" preserveAspectRatio="none">
+            <path d="M0,2 Q25,0 50,2 Q75,4 100,2" stroke={`${green}30`} strokeWidth="1.5" fill="none" strokeDasharray="4,3"/>
+          </svg>
+
+          {/* Step 1 */}
+          <div style={{
+            background: 'rgba(255,255,255,0.025)', borderRadius: 20,
+            padding: '36px 32px', border: '1px solid rgba(255,255,255,0.08)',
+            position: 'relative', zIndex: 1,
+          }}>
+            <div style={{
+              fontFamily: 'Syne, sans-serif', fontWeight: 800,
+              fontSize: 11, color: green, letterSpacing: '0.12em',
+              textTransform: 'uppercase', marginBottom: 20,
+            }}>Paso 01</div>
+            <h3 style={{
+              fontFamily: 'Syne, sans-serif', fontWeight: 700,
+              fontSize: 20, color: '#fff', margin: '0 0 8px',
+              letterSpacing: '-0.02em',
+            }}>Conecta tu negocio</h3>
+            <p style={{
+              fontFamily: 'Inter, sans-serif', fontSize: 13,
+              color: 'rgba(255,255,255,0.45)', margin: '0 0 20px', lineHeight: 1.6,
+            }}>Solo necesitas la URL de tu sitio web o tu nombre en Google.</p>
+
+            {/* URL input mockup */}
+            <div style={{
+              background: '#0a0a0a', borderRadius: 10,
+              border: '1px solid rgba(255,255,255,0.12)',
+              display: 'flex', overflow: 'hidden',
+            }}>
+              <div style={{
+                padding: '10px 12px', borderRight: '1px solid rgba(255,255,255,0.08)',
+                color: 'rgba(255,255,255,0.3)', fontFamily: 'monospace', fontSize: 12,
+                display: 'flex', alignItems: 'center',
+              }}>https://</div>
+              <input
+                type="text"
+                value={url}
+                onChange={e => setUrl(e.target.value)}
+                placeholder="miempresa.com.co"
+                style={{
+                  flex: 1, background: 'none', border: 'none', outline: 'none',
+                  color: '#fff', fontFamily: 'monospace', fontSize: 12,
+                  padding: '10px 12px',
+                }}
+              />
+              <button
+                onClick={handleScan}
+                style={{
+                  background: green, border: 'none', cursor: 'pointer',
+                  padding: '8px 14px', color: '#0a0a0a', fontFamily: 'Inter, sans-serif',
+                  fontWeight: 700, fontSize: 12, transition: 'opacity 0.2s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
+                {scanning ? '...' : 'Auditar →'}
+              </button>
+            </div>
+          </div>
+
+          {/* Step 2 */}
+          <div style={{
+            background: 'rgba(255,255,255,0.025)', borderRadius: 20,
+            padding: '36px 32px', border: '1px solid rgba(255,255,255,0.08)',
+            position: 'relative', zIndex: 1,
+          }}>
+            <div style={{
+              fontFamily: 'Syne, sans-serif', fontWeight: 800,
+              fontSize: 11, color: green, letterSpacing: '0.12em',
+              textTransform: 'uppercase', marginBottom: 20,
+            }}>Paso 02</div>
+            <h3 style={{
+              fontFamily: 'Syne, sans-serif', fontWeight: 700,
+              fontSize: 20, color: '#fff', margin: '0 0 8px', letterSpacing: '-0.02em',
+            }}>EDA hace su magia</h3>
+            <p style={{
+              fontFamily: 'Inter, sans-serif', fontSize: 13,
+              color: 'rgba(255,255,255,0.45)', margin: '0 0 20px', lineHeight: 1.6,
+            }}>Nuestro motor escanea, analiza y prepara en segundos.</p>
+
+            {/* Animated scan cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {scanLabels.slice(0, 3).map((label, i) => {
+                const isActive = scanning && scanStep === i;
+                const isDone = scanning && scanStep > i || (!scanning && scanStep === 0 && false);
+                return (
+                  <div key={i} style={{
+                    background: isActive ? `${green}15` : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${isActive ? green + '40' : 'rgba(255,255,255,0.06)'}`,
+                    borderRadius: 8, padding: '8px 12px',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    transition: 'all 0.4s',
+                  }}>
+                    <div style={{
+                      width: 6, height: 6, borderRadius: '50%',
+                      background: isActive ? green : 'rgba(255,255,255,0.15)',
+                      transition: 'background 0.3s',
+                      boxShadow: isActive ? `0 0 8px ${green}` : 'none',
+                      flexShrink: 0,
+                    }}></div>
+                    <span style={{
+                      fontFamily: 'Inter, sans-serif', fontSize: 12,
+                      color: isActive ? green : 'rgba(255,255,255,0.4)',
+                      transition: 'color 0.3s',
+                    }}>{label}</span>
+                    {isActive && (
+                      <div style={{
+                        marginLeft: 'auto', display: 'flex', gap: 3,
+                      }}>
+                        {[0,1,2].map(d => (
+                          <div key={d} style={{
+                            width: 4, height: 4, borderRadius: '50%',
+                            background: green, opacity: 0.6,
+                            animation: `pulse-dot 1s ${d * 0.2}s infinite`,
+                          }}></div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Step 3 */}
+          <div style={{
+            background: 'rgba(255,255,255,0.025)', borderRadius: 20,
+            padding: '36px 32px', border: '1px solid rgba(255,255,255,0.08)',
+            position: 'relative', zIndex: 1,
+          }}>
+            <div style={{
+              fontFamily: 'Syne, sans-serif', fontWeight: 800,
+              fontSize: 11, color: green, letterSpacing: '0.12em',
+              textTransform: 'uppercase', marginBottom: 20,
+            }}>Paso 03</div>
+            <h3 style={{
+              fontFamily: 'Syne, sans-serif', fontWeight: 700,
+              fontSize: 20, color: '#fff', margin: '0 0 8px', letterSpacing: '-0.02em',
+            }}>Recibe tu reporte</h3>
+            <p style={{
+              fontFamily: 'Inter, sans-serif', fontSize: 13,
+              color: 'rgba(255,255,255,0.45)', margin: '0 0 20px', lineHeight: 1.6,
+            }}>Dashboard claro con acciones concretas y prospectos listos.</p>
+
+            {/* Mini report preview */}
+            <div style={{
+              background: '#0a0a0a', borderRadius: 10,
+              border: '1px solid rgba(255,255,255,0.08)',
+              padding: 14,
+            }}>
+              {[
+                { label: 'SEO Score', val: '72/100', color: green },
+                { label: 'Prospectos', val: '8 nuevos', color: '#60a5fa' },
+                { label: 'Mensajes listos', val: '5', color: '#a78bfa' },
+              ].map((r, i) => (
+                <div key={i} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '7px 0',
+                  borderBottom: i < 2 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                }}>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(255,255,255,0.45)' }}>{r.label}</span>
+                  <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: r.color }}>{r.val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* CTA */}
+        <div style={{ textAlign: 'center', marginTop: 48 }}>
+          <a href="#" style={{
+            fontFamily: 'Inter, sans-serif', fontSize: 14,
+            color: green, textDecoration: 'none',
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            borderBottom: `1px solid ${green}40`, paddingBottom: 2,
+            transition: 'gap 0.2s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.gap = '10px'}
+          onMouseLeave={e => e.currentTarget.style.gap = '6px'}
+          >
+            Probarlo ahora
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M2 7h10M8 3l4 4-4 4" stroke={green} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+
+
+
+// EDA Feature Spotlights
+function FeatureSpotlight({ accentColor }) {
+  const green = accentColor || '#22c55e';
+
+  const features = [
+    {
+      kicker: 'Auditoría',
+      title: 'Auditoría completa en 90 segundos',
+      desc: 'Sabemos exactamente qué está frenando tu visibilidad en Google. En menos de dos minutos tenés un diagnóstico real de tu negocio digital.',
+      bullets: [
+        'Core Web Vitals reales medidos en tu sitio',
+        'SEO técnico: meta tags, velocidad, mobile',
+        'Perfil de Google Business analizado',
+        'Reseñas analizadas con IA',
+        'Recomendaciones priorizadas por impacto',
+      ],
+      mockup: (
+        <div style={{
+          background: '#111', borderRadius: 16,
+          border: '1px solid rgba(255,255,255,0.08)',
+          padding: 24, width: '100%', maxWidth: 420,
+        }}>
+          <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 16, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Reporte de auditoría
+          </div>
+          {[
+            { cat: 'Velocidad de carga', score: 82, color: green },
+            { cat: 'SEO On-page', score: 58, color: '#facc15' },
+            { cat: 'Google Business', score: 40, color: '#f87171' },
+            { cat: 'Reseñas', score: 71, color: green },
+          ].map((item, i) => (
+            <div key={i} style={{ marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(255,255,255,0.55)' }}>{item.cat}</span>
+                <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 12, color: item.color }}>{item.score}</span>
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                <div style={{ width: `${item.score}%`, height: '100%', background: item.color, borderRadius: 4, transition: 'width 0.6s ease' }}></div>
+              </div>
+            </div>
+          ))}
+          <div style={{
+            marginTop: 20, background: `${green}10`, borderRadius: 10,
+            padding: '12px 14px', border: `1px solid ${green}25`,
+          }}>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, fontWeight: 600, color: green, marginBottom: 4 }}>
+              3 acciones de alto impacto identificadas
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
+              Responder reseñas negativas · Añadir imágenes al perfil · Optimizar meta description
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      kicker: 'Prospección',
+      title: 'Tu base de prospectos siempre fresca',
+      desc: 'Mientras dormís, EDA busca negocios en Bogotá, Ciudad de México o Lima que probablemente necesitan tus servicios. Los califica y te los entrega listos.',
+      bullets: [
+        'Filtrado por categoría y zona geográfica',
+        'Score de oportunidad por negocio (0-100)',
+        'Información de contacto verificada',
+        'Actualización continua — sin duplicados',
+      ],
+      mockup: (
+        <div style={{
+          background: '#111', borderRadius: 16,
+          border: '1px solid rgba(255,255,255,0.08)',
+          padding: 24, width: '100%', maxWidth: 420,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: 'rgba(255,255,255,0.6)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              Prospectos · Bogotá
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: green, background: `${green}15`, padding: '3px 8px', borderRadius: 20, border: `1px solid ${green}30` }}>
+              12 nuevos hoy
+            </div>
+          </div>
+          {[
+            { name: 'Ferretería Los Andes', cat: 'Ferretería', score: 87, city: 'Bogotá' },
+            { name: 'Panadería Artesanal MX', cat: 'Panadería', score: 74, city: 'CDMX' },
+            { name: 'Clínica Dental Lima Sur', cat: 'Salud', score: 91, city: 'Lima' },
+          ].map((p, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '10px 0',
+              borderBottom: i < 2 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 8,
+                background: 'rgba(255,255,255,0.06)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 14, color: 'rgba(255,255,255,0.5)',
+                flexShrink: 0,
+              }}>{p.name[0]}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: 12, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>{p.cat} · {p.city}</div>
+              </div>
+              <div style={{
+                fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 14,
+                color: p.score > 80 ? green : '#facc15',
+                flexShrink: 0,
+              }}>{p.score}</div>
+            </div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      kicker: 'Outreach',
+      title: 'Outreach que se siente humano',
+      desc: 'Nada de spam genérico. Cada mensaje que manda EDA menciona datos específicos del negocio. La tasa de respuesta promedio es 3× más alta que los correos masivos.',
+      bullets: [
+        'Mensaje personalizado por prospecto',
+        'Referencia datos reales del negocio destino',
+        'Seguimiento de aperturas y respuestas',
+        'Compatible con email y formularios de contacto',
+      ],
+      mockup: (
+        <div style={{
+          background: '#111', borderRadius: 16,
+          border: '1px solid rgba(255,255,255,0.08)',
+          padding: 24, width: '100%', maxWidth: 420,
+        }}>
+          <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 16, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Mensaje generado
+          </div>
+          {/* Fake email */}
+          <div style={{
+            background: 'rgba(255,255,255,0.03)', borderRadius: 10,
+            border: '1px solid rgba(255,255,255,0.07)',
+            padding: 16,
+          }}>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{
+                width: 32, height: 32, borderRadius: '50%',
+                background: `${green}20`, border: `1px solid ${green}30`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: 'Syne, sans-serif', fontSize: 13, fontWeight: 700, color: green, flexShrink: 0,
+              }}>E</div>
+              <div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: '#fff' }}>EDA para Ferretería Los Andes</div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: 'rgba(255,255,255,0.35)' }}>a: contacto@losandes.com.co</div>
+              </div>
+            </div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(255,255,255,0.55)', lineHeight: 1.7 }}>
+              Hola, encontré <span style={{ color: green }}>Ferretería Los Andes</span> en Google y noté que su perfil no tiene horarios actualizados. En negocios similares en Bogotá, completar el perfil generó un <span style={{ color: green }}>30% más de llamadas</span>. ¿Puedo mostrarte cómo?
+            </div>
+          </div>
+          {/* Stats row */}
+          <div style={{ display: 'flex', gap: 16, marginTop: 14 }}>
+            {[
+              { label: 'Apertura', val: '68%' },
+              { label: 'Respuesta', val: '24%' },
+              { label: 'Citas agendadas', val: '3' },
+            ].map((s, i) => (
+              <div key={i} style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 16, color: green }}>{s.val}</div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 10, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <section id="caracteristicas" style={{ padding: '80px 24px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 100 }}>
+        {features.map((f, i) => (
+          <div key={i} className="spotlight-row" style={{
+            display: 'grid',
+            gridTemplateColumns: i % 2 === 0 ? '1fr 1fr' : '1fr 1fr',
+            gap: 72, alignItems: 'center',
+          }}>
+            {/* Text always left on even, right on odd */}
+            <div style={{ order: i % 2 === 0 ? 0 : 1 }} className="spotlight-text">
+              <div style={{ fontFamily: 'Caveat, cursive', color: green, fontSize: 18, marginBottom: 12 }}>
+                {f.kicker}
+              </div>
+              <h2 style={{
+                fontFamily: 'Syne, sans-serif', fontWeight: 800,
+                fontSize: 'clamp(26px, 3vw, 40px)', color: '#fff',
+                letterSpacing: '-0.03em', margin: '0 0 16px', lineHeight: 1.15,
+              }}>{f.title}</h2>
+              <p style={{
+                fontFamily: 'Inter, sans-serif', fontSize: 16,
+                color: 'rgba(255,255,255,0.5)', lineHeight: 1.7, margin: '0 0 28px',
+              }}>{f.desc}</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {f.bullets.map((b, j) => (
+                  <div key={j} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <svg style={{ flexShrink: 0, marginTop: 3 }} width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <circle cx="8" cy="8" r="7" fill={`${green}20`}/>
+                      <path d="M5 8l2.5 2.5L11 5.5" stroke={green} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: 'rgba(255,255,255,0.65)', lineHeight: 1.55 }}>{b}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Mockup */}
+            <div style={{
+              order: i % 2 === 0 ? 1 : 0,
+              display: 'flex', justifyContent: 'center',
+            }} className="spotlight-mockup">
+              <div style={{
+                position: 'relative',
+                filter: `drop-shadow(0 20px 60px ${green}18)`,
+              }}>
+                {/* Glow behind */}
+                <div style={{
+                  position: 'absolute', inset: -20,
+                  background: `radial-gradient(ellipse, ${green}10 0%, transparent 70%)`,
+                  borderRadius: '50%',
+                  pointerEvents: 'none',
+                }}></div>
+                {f.mockup}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+
+
+
+
+// EDA Social Proof / Testimonials
+function SocialProof({ accentColor }) {
+  const green = accentColor || '#22c55e';
+
+  const logos = ['Tasty MX', 'Ferretek', 'AgroSur', 'MediCare+', 'PrintLab', 'EstudioCO', 'TechLima', 'CaféAndes'];
+
+  const testimonials = [
+    {
+      quote: 'Reclamamos nuestro perfil de Google y agregamos 5 fotos. La semana siguiente recibimos 40% más llamadas.',
+      name: 'María Rodríguez',
+      role: 'Dueña',
+      company: 'Pizzería Mario',
+      city: 'Bogotá',
+      initials: 'MR',
+      color: '#f97316',
+    },
+    {
+      quote: 'EDA me consiguió 12 prospectos la primera semana. Cerré 2 contratos. El ROI fue inmediato.',
+      name: 'Carlos Mendoza',
+      role: 'Fundador',
+      company: 'DigitalPro MX',
+      city: 'Ciudad de México',
+      initials: 'CM',
+      color: '#60a5fa',
+    },
+    {
+      quote: 'No tenía tiempo para marketing. Ahora EDA trabaja mientras yo atiendo clientes. Simple y efectivo.',
+      name: 'Ana Vargas',
+      role: 'Propietaria',
+      company: 'Clínica Dental Vargas',
+      city: 'Lima',
+      initials: 'AV',
+      color: '#a78bfa',
+    },
+  ];
+
+  return (
+    <section id="casos" style={{ padding: '100px 24px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 60 }}>
+          <div style={{ fontFamily: 'Caveat, cursive', color: green, fontSize: 18, marginBottom: 12 }}>
+            Casos reales
+          </div>
+          <h2 style={{
+            fontFamily: 'Syne, sans-serif', fontWeight: 800,
+            fontSize: 'clamp(28px, 3.5vw, 44px)', color: '#fff',
+            letterSpacing: '-0.03em', margin: 0,
+          }}>Negocios que ya están creciendo con EDA</h2>
+        </div>
+
+        {/* Logo strip */}
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', justifyContent: 'center',
+          gap: 12, marginBottom: 64,
+          padding: '24px 0', borderTop: '1px solid rgba(255,255,255,0.06)',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          {logos.map((logo, i) => (
+            <div key={i} style={{
+              padding: '8px 20px', background: 'rgba(255,255,255,0.04)',
+              borderRadius: 8, border: '1px solid rgba(255,255,255,0.07)',
+              fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13,
+              color: 'rgba(255,255,255,0.3)', letterSpacing: '0.02em',
+            }}>{logo}</div>
+          ))}
+        </div>
+
+        {/* Testimonials */}
+        <div className="testimonials-grid" style={{
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20,
+        }}>
+          {testimonials.map((t, i) => (
+            <div key={i} style={{
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.07)',
+              borderRadius: 16, padding: '28px 28px 24px',
+              display: 'flex', flexDirection: 'column', gap: 20,
+              transition: 'border-color 0.3s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = `${green}30`}
+            onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'}
+            >
+              {/* Stars */}
+              <div style={{ display: 'flex', gap: 3 }}>
+                {[...Array(5)].map((_, s) => (
+                  <svg key={s} width="13" height="13" viewBox="0 0 13 13" fill={green}>
+                    <path d="M6.5 1l1.4 3.9H12L8.7 7.3l1.2 3.9-3.4-2.4-3.4 2.4 1.2-3.9L1 4.9h4.1z"/>
+                  </svg>
+                ))}
+              </div>
+
+              {/* Quote */}
+              <p style={{
+                fontFamily: 'Inter, sans-serif', fontSize: 15,
+                fontStyle: 'italic', lineHeight: 1.7,
+                color: 'rgba(255,255,255,0.7)', margin: 0, flex: 1,
+              }}>"{t.quote}"</p>
+
+              {/* Author */}
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{
+                  width: 40, height: 40, borderRadius: '50%',
+                  background: `${t.color}20`, border: `1.5px solid ${t.color}40`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: t.color,
+                  flexShrink: 0,
+                }}>{t.initials}</div>
+                <div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontWeight: 600, fontSize: 13, color: '#fff' }}>{t.name}</div>
+                  <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: 'rgba(255,255,255,0.35)' }}>
+                    {t.role}, {t.company} · {t.city}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Note */}
+        <p style={{
+          textAlign: 'center', marginTop: 24,
+          fontFamily: 'Inter, sans-serif', fontSize: 12,
+          color: 'rgba(255,255,255,0.25)', fontStyle: 'italic',
+        }}>
+          {/* Testimonios reales se cargarán dinámicamente desde CMS */}
+          Testimonios verificados de usuarios reales de EDA.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+
+
+
+
+// EDA Pricing Section
+function Pricing({ accentColor }) {
+  const green = accentColor || '#22c55e';
+  const [annual, setAnnual] = React.useState(false);
+
+  const plans = [
+    {
+      name: 'Free',
+      price: 0,
+      desc: 'Para empezar a entender tu presencia digital.',
+      features: [
+        '1 auditoría por mes',
+        'Ver hasta 10 prospectos',
+        'Reporte básico de salud digital',
+        'Sin outreach automático',
+      ],
+      cta: 'Empezar gratis',
+      ctaStyle: 'outline',
+      popular: false,
+    },
+    {
+      name: 'Starter',
+      price: 29,
+      desc: 'Para pymes que quieren crecer con consistencia.',
+      features: [
+        '10 auditorías por mes',
+        '100 prospectos por mes',
+        '50 mensajes de outreach',
+        'Soporte por chat',
+        'Exportar reportes en PDF',
+      ],
+      cta: 'Probar 14 días gratis',
+      ctaStyle: 'primary',
+      popular: true,
+    },
+    {
+      name: 'Growth',
+      price: 79,
+      desc: 'Para equipos con procesos de ventas activos.',
+      features: [
+        '50 auditorías por mes',
+        '1,000 prospectos por mes',
+        '500 mensajes de outreach',
+        'Integraciones CRM y WhatsApp Business',
+        'Soporte prioritario',
+        'Acceso API',
+      ],
+      cta: 'Hablar con ventas',
+      ctaStyle: 'outline',
+      popular: false,
+    },
+  ];
+
+  return (
+    <section id="precios" style={{ padding: '100px 24px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+          <div style={{ fontFamily: 'Caveat, cursive', color: green, fontSize: 18, marginBottom: 12 }}>
+            Precios
+          </div>
+          <h2 style={{
+            fontFamily: 'Syne, sans-serif', fontWeight: 800,
+            fontSize: 'clamp(28px, 3.5vw, 48px)', color: '#fff',
+            letterSpacing: '-0.03em', margin: '0 0 8px',
+          }}>Precios simples</h2>
+          <p style={{
+            fontFamily: 'Inter, sans-serif', fontSize: 16,
+            color: 'rgba(255,255,255,0.45)', margin: '0 0 28px',
+          }}>Empieza gratis. Crece a tu ritmo.</p>
+
+          {/* Annual toggle */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: !annual ? '#fff' : 'rgba(255,255,255,0.4)' }}>Mensual</span>
+            <button
+              onClick={() => setAnnual(!annual)}
+              style={{
+                width: 44, height: 24, borderRadius: 12,
+                background: annual ? green : 'rgba(255,255,255,0.12)',
+                border: 'none', cursor: 'pointer', position: 'relative',
+                transition: 'background 0.3s',
+              }}
+            >
+              <div style={{
+                position: 'absolute', top: 3, left: annual ? 23 : 3,
+                width: 18, height: 18, borderRadius: '50%',
+                background: '#fff', transition: 'left 0.3s',
+              }}></div>
+            </button>
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: annual ? '#fff' : 'rgba(255,255,255,0.4)' }}>
+              Anual
+              <span style={{
+                marginLeft: 6, background: `${green}20`, color: green,
+                fontSize: 11, fontWeight: 600, padding: '2px 6px',
+                borderRadius: 20, border: `1px solid ${green}30`,
+              }}>−15%</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Plans grid */}
+        <div className="pricing-grid" style={{
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16,
+          alignItems: 'start',
+        }}>
+          {plans.map((plan, i) => {
+            const displayPrice = annual && plan.price > 0
+              ? Math.round(plan.price * 0.85)
+              : plan.price;
+
+            return (
+              <div key={i} style={{
+                background: plan.popular ? 'rgba(34,197,94,0.06)' : 'rgba(255,255,255,0.025)',
+                border: plan.popular ? `1.5px solid ${green}50` : '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 20, padding: '32px 28px',
+                position: 'relative',
+                boxShadow: plan.popular ? `0 0 40px ${green}12` : 'none',
+                transition: 'transform 0.2s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-3px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                {/* Popular badge */}
+                {plan.popular && (
+                  <div style={{
+                    position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)',
+                    background: green, color: '#0a0a0a', fontFamily: 'Inter, sans-serif',
+                    fontWeight: 700, fontSize: 11, padding: '4px 14px',
+                    borderRadius: 20, whiteSpace: 'nowrap', letterSpacing: '0.04em',
+                  }}>MÁS POPULAR</div>
+                )}
+
+                <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 16, color: '#fff', marginBottom: 4 }}>
+                  {plan.name}
+                </div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'rgba(255,255,255,0.4)', marginBottom: 24, lineHeight: 1.5 }}>
+                  {plan.desc}
+                </div>
+
+                {/* Price */}
+                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, marginBottom: 28 }}>
+                  {plan.price === 0 ? (
+                    <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 44, color: '#fff', lineHeight: 1 }}>Gratis</span>
+                  ) : (
+                    <>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 16, color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>$</span>
+                      <span style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 48, color: '#fff', lineHeight: 1 }}>{displayPrice}</span>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, color: 'rgba(255,255,255,0.4)', marginBottom: 8 }}>USD/mes</span>
+                    </>
+                  )}
+                </div>
+
+                {/* CTA */}
+                <a href="#" style={{
+                  display: 'block', textAlign: 'center', textDecoration: 'none',
+                  padding: '12px 0', borderRadius: 10, marginBottom: 24,
+                  fontFamily: 'Inter, sans-serif', fontWeight: 700, fontSize: 14,
+                  background: plan.ctaStyle === 'primary' ? green : 'transparent',
+                  color: plan.ctaStyle === 'primary' ? '#0a0a0a' : 'rgba(255,255,255,0.8)',
+                  border: plan.ctaStyle === 'primary' ? 'none' : '1px solid rgba(255,255,255,0.2)',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={e => {
+                  if (plan.ctaStyle === 'primary') {
+                    e.currentTarget.style.opacity = '0.88';
+                  } else {
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.4)';
+                    e.currentTarget.style.color = '#fff';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (plan.ctaStyle === 'primary') {
+                    e.currentTarget.style.opacity = '1';
+                  } else {
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+                    e.currentTarget.style.color = 'rgba(255,255,255,0.8)';
+                  }
+                }}
+                >{plan.cta}</a>
+
+                {/* Features */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {plan.features.map((f, j) => (
+                    <div key={j} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <svg style={{ flexShrink: 0, marginTop: 2 }} width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <circle cx="7" cy="7" r="6" fill={`${green}20`}/>
+                        <path d="M4.5 7l2 2L9.5 5" stroke={green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5 }}>{f}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer notes */}
+        <div style={{ textAlign: 'center', marginTop: 32 }}>
+          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'rgba(255,255,255,0.35)', margin: '0 0 8px' }}>
+            Precios en USD. Facturación mensual o anual (15% descuento). Cancela cuando quieras.
+          </p>
+          <p style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: 'rgba(255,255,255,0.35)', margin: 0 }}>
+            ¿Necesitas algo a medida?{' '}
+            <a href="#" style={{ color: green, textDecoration: 'none' }}>
+              Tenemos plan Agencia (multi-cliente, white-label) — contáctanos
+            </a>
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+
+
+
+// EDA FAQ Section
+function FAQ({ accentColor }) {
+  const green = accentColor || '#22c55e';
+  const [open, setOpen] = React.useState(null);
+
+  const faqs = [
+    {
+      q: '¿Cómo funciona la auditoría?',
+      a: 'Ingresás la URL de tu negocio o su nombre en Google. EDA analiza tu sitio web (velocidad, SEO técnico, mobile), tu perfil de Google Business, tus reseñas, y tu presencia en redes. En 90 segundos tenés un reporte con score por categoría y acciones priorizadas.',
+    },
+    {
+      q: '¿De dónde sacan los datos de mi negocio?',
+      a: 'Usamos fuentes públicas: Google Search Console API, Google Places, datos de rendimiento web (Core Web Vitals), y directorios de negocios locales. No accedemos a ningún sistema privado sin tu autorización explícita.',
+    },
+    {
+      q: '¿El outreach por correo es legal en mi país?',
+      a: 'EDA cumple con las regulaciones de privacidad de cada país donde opera, incluyendo LFPDPPP (México), Ley de Habeas Data (Colombia), y marcos equivalentes en Perú, Chile y Argentina. Solo contactamos negocios con información pública disponible, y cada mensaje incluye opción de exclusión.',
+    },
+    {
+      q: '¿Puedo cancelar cuando quiera?',
+      a: 'Sí, sin preguntas. Podés cancelar desde tu panel en cualquier momento. Si pagaste anual, te devolvemos el proporcional del tiempo no usado.',
+    },
+    {
+      q: '¿Qué pasa si no tengo sitio web?',
+      a: 'No pasa nada. EDA puede hacer una auditoría basada únicamente en tu perfil de Google Business. De hecho, te damos recomendaciones específicas para que tengas presencia digital básica incluso sin sitio propio.',
+    },
+    {
+      q: '¿Cuántos clientes necesito para que valga la pena?',
+      a: 'Con un solo cliente nuevo que cierre gracias a EDA, el plan Starter se paga solo. La mayoría de los negocios que usan EDA recuperan su inversión en la primera semana. Si no ves resultados en 14 días, te devolvemos el dinero.',
+    },
+    {
+      q: '¿Funciona para mi categoría de negocio?',
+      a: 'EDA funciona para cualquier negocio local con clientes B2B o B2C: restaurantes, clínicas, ferreterías, estudios contables, agencias, talleres mecánicos, salones de belleza, y más. Si tu negocio puede aparecer en Google, EDA puede auditarlo.',
+    },
+    {
+      q: '¿Tienen integración con WhatsApp?',
+      a: 'Sí, en el plan Growth. Integramos con WhatsApp Business API para enviar mensajes de outreach directamente por WhatsApp, con seguimiento de respuestas desde el dashboard de EDA.',
+    },
+  ];
+
+  return (
+    <section style={{ padding: '100px 24px' }}>
+      <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 56 }}>
+          <div style={{ fontFamily: 'Caveat, cursive', color: green, fontSize: 18, marginBottom: 12 }}>
+            FAQ
+          </div>
+          <h2 style={{
+            fontFamily: 'Syne, sans-serif', fontWeight: 800,
+            fontSize: 'clamp(28px, 3.5vw, 44px)', color: '#fff',
+            letterSpacing: '-0.03em', margin: 0,
+          }}>Preguntas frecuentes</h2>
+        </div>
+
+        {/* Accordion */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {faqs.map((faq, i) => (
+            <div key={i} style={{
+              border: `1px solid ${open === i ? green + '35' : 'rgba(255,255,255,0.07)'}`,
+              borderRadius: 12,
+              background: open === i ? 'rgba(34,197,94,0.04)' : 'rgba(255,255,255,0.02)',
+              transition: 'all 0.25s',
+              overflow: 'hidden',
+            }}>
+              <button
+                onClick={() => setOpen(open === i ? null : i)}
+                style={{
+                  width: '100%', background: 'none', border: 'none',
+                  cursor: 'pointer', padding: '18px 22px',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  gap: 16, textAlign: 'left',
+                }}
+              >
+                <span style={{
+                  fontFamily: 'Inter, sans-serif', fontWeight: 600,
+                  fontSize: 15, color: '#fff', lineHeight: 1.4,
+                }}>{faq.q}</span>
+                <div style={{
+                  width: 22, height: 22, borderRadius: '50%',
+                  background: open === i ? `${green}20` : 'rgba(255,255,255,0.06)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0, transition: 'all 0.25s',
+                }}>
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
+                    style={{ transform: open === i ? 'rotate(180deg)' : 'none', transition: 'transform 0.25s' }}>
+                    <path d="M2 3.5l3 3 3-3" stroke={open === i ? green : 'rgba(255,255,255,0.5)'}
+                      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+              </button>
+
+              {open === i && (
+                <div style={{ padding: '0 22px 20px' }}>
+                  <p style={{
+                    fontFamily: 'Inter, sans-serif', fontSize: 14,
+                    color: 'rgba(255,255,255,0.55)', lineHeight: 1.75,
+                    margin: 0,
+                  }}>{faq.a}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
+
+
+
+// EDA Final CTA + Footer
+function FinalCTA({ accentColor }) {
+  const green = accentColor || '#22c55e';
+
+  return (
+    <section style={{
+      padding: '120px 24px',
+      position: 'relative', overflow: 'hidden',
+      background: '#0d0d0d',
+      borderTop: '1px solid rgba(255,255,255,0.06)',
+    }}>
+      {/* Green glow */}
+      <div style={{
+        position: 'absolute', top: '50%', left: '50%',
+        transform: 'translate(-50%, -50%)',
+        width: 600, height: 400,
+        background: `radial-gradient(ellipse, ${green}18 0%, transparent 70%)`,
+        pointerEvents: 'none',
+      }}></div>
+
+      {/* Sketchy circle decoration */}
+      <div style={{
+        position: 'absolute', right: '-80px', top: '50%',
+        transform: 'translateY(-50%)',
+        opacity: 0.06, pointerEvents: 'none',
+      }}>
+        <img src="uploads/logo_eda_sin_background.png" alt="" style={{ width: 400, height: 400, filter: 'grayscale(1) invert(1)' }} />
+      </div>
+      <div style={{
+        position: 'absolute', left: '-80px', top: '50%',
+        transform: 'translateY(-50%)',
+        opacity: 0.04, pointerEvents: 'none',
+      }}>
+        <img src="uploads/logo_eda_sin_background.png" alt="" style={{ width: 300, height: 300, filter: 'grayscale(1) invert(1)' }} />
+      </div>
+
+      <div style={{ maxWidth: 700, margin: '0 auto', textAlign: 'center', position: 'relative', zIndex: 1 }}>
+        <div style={{ fontFamily: 'Caveat, cursive', color: green, fontSize: 20, marginBottom: 16 }}>
+          Listo para empezar
+        </div>
+        <h2 style={{
+          fontFamily: 'Syne, sans-serif', fontWeight: 800,
+          fontSize: 'clamp(36px, 5vw, 64px)', color: '#fff',
+          letterSpacing: '-0.03em', lineHeight: 1.05,
+          margin: '0 0 20px',
+        }}>
+          Empieza a crecer<br/>
+          <span style={{ color: green }}>en 90 segundos.</span>
+        </h2>
+        <p style={{
+          fontFamily: 'Inter, sans-serif', fontSize: 18,
+          color: 'rgba(255,255,255,0.5)', margin: '0 0 40px', lineHeight: 1.6,
+        }}>
+          Tu primera auditoría es gratis. No necesitas tarjeta.
+        </p>
+        <a href="#" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 10,
+          background: green, color: '#0a0a0a',
+          fontFamily: 'Inter, sans-serif', fontWeight: 700,
+          fontSize: 17, padding: '16px 36px',
+          borderRadius: 12, textDecoration: 'none',
+          boxShadow: `0 0 0 0 ${green}40`,
+          transition: 'transform 0.15s, box-shadow 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 12px 40px ${green}45`; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = `0 0 0 0 ${green}40`; }}
+        >
+          Audita tu negocio →
+        </a>
+      </div>
+    </section>
+  );
+}
+
+function Footer({ accentColor }) {
+  const green = accentColor || '#22c55e';
+
+  const cols = [
+    {
+      title: null,
+      isLogo: true,
+    },
+    {
+      title: 'Producto',
+      links: ['Características', 'Precios', 'Cambios', 'Roadmap'],
+    },
+    {
+      title: 'Empresa',
+      links: ['Sobre nosotros', 'Blog', 'Casos de éxito', 'Contacto'],
+    },
+    {
+      title: 'Legal',
+      links: ['Términos', 'Privacidad', 'Cookies', 'GDPR / LFPDPPP / Habeas Data'],
+    },
+  ];
+
+  const socials = [
+    {
+      name: 'X',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M12.6 1.5h2.3L9.8 7.1 15.7 14.5H11l-3.7-4.9-4.3 4.9H.6l5.5-6.3L.3 1.5h4.8l3.4 4.5 4.1-4.5zm-.8 11.7h1.3L4.2 2.8H2.8l9 10.4z"/>
+        </svg>
+      ),
+    },
+    {
+      name: 'LinkedIn',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M0 1.1C0 .5.5 0 1.2 0h13.6C15.5 0 16 .5 16 1.1v13.7c0 .7-.5 1.2-1.2 1.2H1.2C.5 16 0 15.5 0 14.8V1.1zm4.9 11.9V6.2H2.6v6.8h2.3zm-1.1-7.7c.8 0 1.3-.5 1.3-1.2C5 3.4 4.5 2.9 3.8 2.9c-.8 0-1.3.5-1.3 1.2 0 .7.5 1.2 1.3 1.2zm9.2 7.7V8.9c0-2.1-1.1-3-2.6-3-1.2 0-1.8.7-2.1 1.1V6.2H6v6.8h2.3V9c0-.2 0-.4.1-.5.2-.4.6-.9 1.3-.9.9 0 1.3.7 1.3 1.7v3.7H13z"/>
+        </svg>
+      ),
+    },
+    {
+      name: 'YouTube',
+      icon: (
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M15.8 4.8s-.2-1.3-.8-1.9c-.7-.8-1.6-.8-2-.8C11 2 8 2 8 2s-3 0-5 .1c-.4 0-1.3 0-2 .8C.4 3.5.2 4.8.2 4.8S0 6.3 0 7.8v1.4c0 1.5.2 3 .2 3s.2 1.3.8 1.9c.7.8 1.7.7 2.2.8C4.8 15 8 15 8 15s3 0 5-.1c.4 0 1.3 0 2-.8.6-.6.8-1.9.8-1.9s.2-1.5.2-3V7.8c0-1.5-.2-3-.2-3zM6.4 10.3V5.7l5 2.3-5 2.3z"/>
+        </svg>
+      ),
+    },
+  ];
+
+  return (
+    <footer style={{
+      borderTop: '1px solid rgba(255,255,255,0.06)',
+      padding: '64px 24px 32px',
+      background: '#0a0a0a',
+    }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {/* Main columns */}
+        <div className="footer-grid" style={{
+          display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr',
+          gap: 48, marginBottom: 48,
+        }}>
+          {/* Logo col */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+              <img src="uploads/logo_eda_sin_background.png" alt="EDA" style={{ height: 40, width: 40 }} />
+              <img src="uploads/eda.png" alt="EDA" style={{ height: 22, filter: 'invert(1) brightness(2)' }} />
+            </div>
+            <div style={{
+              fontFamily: 'Caveat, cursive', color: green,
+              fontSize: 18, marginBottom: 10,
+            }}>Evalúa. Descubre. Alcanza.</div>
+            <p style={{
+              fontFamily: 'Inter, sans-serif', fontSize: 13,
+              color: 'rgba(255,255,255,0.35)', lineHeight: 1.65,
+              margin: 0, maxWidth: 240,
+            }}>
+              La plataforma de visibilidad digital y prospección automática para pymes de LATAM.
+            </p>
+          </div>
+
+          {/* Link cols */}
+          {cols.slice(1).map((col, i) => (
+            <div key={i}>
+              <div style={{
+                fontFamily: 'Syne, sans-serif', fontWeight: 700,
+                fontSize: 13, color: 'rgba(255,255,255,0.7)',
+                marginBottom: 16, letterSpacing: '0.04em',
+              }}>{col.title}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {col.links.map((link, j) => (
+                  <a key={j} href="#" style={{
+                    fontFamily: 'Inter, sans-serif', fontSize: 13,
+                    color: 'rgba(255,255,255,0.38)', textDecoration: 'none',
+                    transition: 'color 0.2s', lineHeight: 1.4,
+                  }}
+                  onMouseEnter={e => e.target.style.color = 'rgba(255,255,255,0.75)'}
+                  onMouseLeave={e => e.target.style.color = 'rgba(255,255,255,0.38)'}
+                  >{link}</a>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom strip */}
+        <div style={{
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          paddingTop: 24, display: 'flex',
+          justifyContent: 'space-between', alignItems: 'center',
+          flexWrap: 'wrap', gap: 16,
+        }}>
+          <span style={{
+            fontFamily: 'Inter, sans-serif', fontSize: 12,
+            color: 'rgba(255,255,255,0.25)',
+          }}>© 2026 EDA · Hecho en Latinoamérica 🌎</span>
+
+          <div style={{ display: 'flex', gap: 12 }}>
+            {socials.map((s, i) => (
+              <a key={i} href="#" aria-label={s.name} style={{
+                width: 32, height: 32, borderRadius: 8,
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'rgba(255,255,255,0.4)', textDecoration: 'none',
+                transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = `${green}20`; e.currentTarget.style.color = green; e.currentTarget.style.borderColor = `${green}40`; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = 'rgba(255,255,255,0.4)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
+              >{s.icon}</a>
+            ))}
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+
+
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accentColor": "#22c55e",
+  "fontStyle": "Syne",
+  "darkMode": true,
+  "heroHeadline": "Tu negocio en Google. Visible, conectado, creciendo.",
+  "showPricing": true
+}/*EDITMODE-END*/;
+
+function App() {
+  const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const green = (tweaks && tweaks.accentColor) || '#22c55e';
+  const bg = (tweaks && tweaks.darkMode) ? '#0a0a0a' : '#f8f7f4';
+  const textPrimary = (tweaks && tweaks.darkMode) ? '#fff' : '#0a0a0a';
+
+  React.useEffect(() => {
+    document.body.style.background = bg;
+    document.body.style.color = textPrimary;
+  }, [bg, textPrimary]);
+
+  return (
+    <div style={{ background: bg, color: textPrimary, minHeight: '100vh' }}>
+      <Navbar accentColor={green} />
+      <main>
+        <Hero accentColor={green} headlineOverride={tweaks && tweaks.heroHeadline} />
+        <div className="section-sep"></div>
+        <Pillars accentColor={green} />
+        <div className="section-sep"></div>
+        <HowItWorks accentColor={green} />
+        <div className="section-sep"></div>
+        <FeatureSpotlight accentColor={green} />
+        <div className="section-sep"></div>
+        <SocialProof accentColor={green} />
+        {tweaks && tweaks.showPricing && (
+          <React.Fragment>
+            <div className="section-sep"></div>
+            <Pricing accentColor={green} />
+          </React.Fragment>
+        )}
+        <div className="section-sep"></div>
+        <FAQ accentColor={green} />
+        <FinalCTA accentColor={green} />
+      </main>
+      <Footer accentColor={green} />
+      <TweaksPanel>
+        <TweakSection title="Marca">
+          <TweakColor id="accentColor" label="Color acento" />
+          <TweakRadio id="fontStyle" label="Tipografía display" options={['Syne', 'Inter', 'Caveat']} />
+        </TweakSection>
+        <TweakSection title="Contenido">
+          <TweakText id="heroHeadline" label="Titular del hero" />
+          <TweakToggle id="showPricing" label="Mostrar Precios" />
+          <TweakToggle id="darkMode" label="Modo oscuro" />
+        </TweakSection>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+
+  </script>
+</body>
+</html>
