@@ -248,7 +248,7 @@ export default function LandingPage() {
 
       <LandingHero url={url} onUrlChange={setUrl} onScan={handleScan} trialExhausted={trialExhausted} />
 
-      <DemoReport reportData={reportData} url={url} onUrlChange={setUrl} onScan={handleScan} trialExhausted={trialExhausted} />
+      {/* <DemoReport reportData={reportData} url={url} onUrlChange={setUrl} onScan={handleScan} trialExhausted={trialExhausted} /> */}
 
       <Pillars />
 
@@ -258,7 +258,7 @@ export default function LandingPage() {
 
       <SocialProof />
 
-      <Pricing />
+      {/* <Pricing /> */}
 
       <FAQ />
 
