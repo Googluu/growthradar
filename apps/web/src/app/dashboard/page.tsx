@@ -158,6 +158,8 @@ function ChipInput({ chips, onChange }: {
       {chips.length < MAX_CHIPS && (
         <input
           ref={inputRef}
+          id="keywords"
+          name="keywords"
           type="text"
           value={val}
           onChange={e => setVal(e.target.value)}
@@ -184,8 +186,11 @@ function ChipInput({ chips, onChange }: {
 }
 
 // ── Audit form ────────────────────────────────────────────────────────────────
-function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
-  const [domain,      setDomain]      = useState("");
+function AuditForm({ onSubmit, initialDomain = "" }: {
+  onSubmit: (data: AuditFormData) => void;
+  initialDomain?: string;
+}) {
+  const [domain,      setDomain]      = useState(initialDomain);
   const [businessName, setBusinessName] = useState("");
   const [keywords,    setKeywords]    = useState<string[]>([]);
   const [countryCode, setCountryCode] = useState(2170);
@@ -239,11 +244,13 @@ function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
         {/* Dominio */}
         <div style={{ position: "relative" }}>
           <input
+            id="domain"
+            name="domain"
             type="text"
             value={domain}
             onChange={e => setDomain(e.target.value)}
             placeholder="tudominio.com"
-            autoComplete="off"
+            autoComplete="url"
             style={inputStyle(isDomainValid(domain))}
             onFocus={e => { e.target.style.borderColor = Gb; }}
             onBlur={e => { if (!isDomainValid(domain)) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
@@ -266,11 +273,13 @@ function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
 
         {/* Nombre del negocio */}
         <input
+          id="business-name"
+          name="businessName"
           type="text"
           value={businessName}
           onChange={e => setBusinessName(e.target.value)}
           placeholder="Nombre de tu negocio"
-          autoComplete="off"
+          autoComplete="organization"
           style={inputStyle(bizOk)}
           onFocus={e => { e.target.style.borderColor = Gb; }}
           onBlur={e => { if (!bizOk) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
@@ -305,7 +314,7 @@ function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
 
             {/* Keywords chip input */}
             <div>
-              <label style={{
+              <label htmlFor="keywords" style={{
                 display: "block", marginBottom: 6,
                 fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
                 color: "rgba(255,255,255,0.4)", fontWeight: 500,
@@ -324,7 +333,7 @@ function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
 
             {/* País */}
             <div>
-              <label style={{
+              <label htmlFor="country" style={{
                 display: "block", marginBottom: 6,
                 fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
                 color: "rgba(255,255,255,0.4)", fontWeight: 500,
@@ -334,6 +343,8 @@ function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
               </label>
               <div style={{ position: "relative" }}>
                 <select
+                  id="country"
+                  name="countryCode"
                   value={countryCode}
                   onChange={e => setCountryCode(Number(e.target.value))}
                   style={{
@@ -362,7 +373,7 @@ function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
 
             {/* Google Business */}
             <div>
-              <label style={{
+              <label htmlFor="google-business" style={{
                 display: "block", marginBottom: 6,
                 fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
                 color: "rgba(255,255,255,0.4)", fontWeight: 500,
@@ -371,11 +382,13 @@ function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
                 ¿Tienes perfil en Google Maps?
               </label>
               <input
+                id="google-business"
+                name="googleBusiness"
                 type="url"
                 value={googleBiz}
                 onChange={e => setGoogleBiz(e.target.value)}
                 placeholder="https://maps.google.com/?cid=..."
-                autoComplete="off"
+                autoComplete="url"
                 style={inputStyle(googleBiz.length > 0)}
                 onFocus={e => { e.target.style.borderColor = Gb; }}
                 onBlur={e => { if (!googleBiz) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
@@ -623,6 +636,12 @@ export default function DashboardPage() {
   const [serpData, setSerpData] = useState<SerpData | null>(null);
   const [errMsg,   setErrMsg]   = useState("");
 
+  const [initialDomain] = useState(() => {
+    if (typeof window === "undefined") return "";
+    const raw = new URLSearchParams(window.location.search).get("url") ?? "";
+    return raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0];
+  });
+
   const runAudit = useCallback(async (data: AuditFormData) => {
     setLastForm(data);
     setPhase("scanning");
@@ -697,7 +716,7 @@ export default function DashboardPage() {
                 Dashboard
               </span>
             </div>
-            <AuditForm onSubmit={runAudit} />
+            <AuditForm onSubmit={runAudit} initialDomain={initialDomain} />
           </>
         )}
 
