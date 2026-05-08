@@ -1,16 +1,43 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import { SerpSection } from "@/components/dashboard/SerpSection";
 import type { SerpData, DashboardAuditResult } from "@/types/dashboard";
 
-// ── API ───────────────────────────────────────────────────────────────────────
-const API_BASE        = "http://localhost:8000";
-const POLL_INTERVAL   = 4_000;
-const POLL_TIMEOUT    = 120_000;
+// ── Constants ─────────────────────────────────────────────────────────────────
+const API_BASE      = "http://localhost:8000";
+const POLL_INTERVAL = 4_000;
+const POLL_TIMEOUT  = 120_000;
+const MAX_CHIPS     = 5;
 
-async function triggerAudit(domain: string, keyword?: string): Promise<{ job_id: string; status: string; cached: boolean }> {
+const COUNTRIES = [
+  { label: "Colombia 🇨🇴",   code: 2170 },
+  { label: "México 🇲🇽",     code: 2484 },
+  { label: "Perú 🇵🇪",       code: 2604 },
+  { label: "Chile 🇨🇱",      code: 2152 },
+  { label: "Argentina 🇦🇷",  code: 2032 },
+  { label: "Ecuador 🇪🇨",    code: 2218 },
+  { label: "Uruguay 🇺🇾",    code: 2858 },
+  { label: "Costa Rica 🇨🇷", code: 2188 },
+  { label: "España 🇪🇸",     code: 2724 },
+  { label: "EE.UU. 🇺🇸",     code: 2840 },
+] as const;
+
+// ── Form data ─────────────────────────────────────────────────────────────────
+interface AuditFormData {
+  domain: string;
+  businessName: string;
+  keywords: string[];
+  countryCode: number;
+  googleBusiness: string;
+}
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function triggerAudit(
+  domain: string,
+  keyword?: string,
+): Promise<{ job_id: string; status: string; cached: boolean }> {
   const res = await fetch(`${API_BASE}/public/dashboard-audit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -36,18 +63,379 @@ async function pollAudit(job_id: string): Promise<DashboardAuditResult> {
   throw new Error("audit_timeout");
 }
 
-// ── Color tokens (shared with SerpSection) ────────────────────────────────────
-const G   = "#5DB848";
-const Gs  = "rgba(93,184,72,0.12)";
-const Gb  = "rgba(93,184,72,0.35)";
+// ── Color tokens ──────────────────────────────────────────────────────────────
+const G  = "#5DB848";
+const Gs = "rgba(93,184,72,0.12)";
+const Gb = "rgba(93,184,72,0.35)";
 
-// ── Scan indicator ────────────────────────────────────────────────────────────
-function ScanningCard({ domain, keyword }: { domain: string; keyword: string }) {
+// ── Domain validation ─────────────────────────────────────────────────────────
+function isDomainValid(raw: string): boolean {
+  const d = raw.trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0];
+  return d.length > 3 && d.includes(".") && !d.includes(" ");
+}
+
+// ── Shared input style ────────────────────────────────────────────────────────
+const inputStyle = (active: boolean): React.CSSProperties => ({
+  width: "100%", padding: "14px 18px",
+  background: "rgba(255,255,255,0.04)",
+  border: `1px solid ${active ? Gb : "rgba(255,255,255,0.1)"}`,
+  borderRadius: 12, color: "#fff",
+  fontFamily: "var(--font-inter), sans-serif", fontSize: 15,
+  outline: "none", transition: "border-color 0.2s",
+});
+
+// ── Chip keyword input ────────────────────────────────────────────────────────
+function ChipInput({ chips, onChange }: {
+  chips: string[];
+  onChange: (chips: string[]) => void;
+}) {
+  const [val, setVal] = useState("");
+  const inputRef      = useRef<HTMLInputElement>(null);
+  const [focused, setFocused] = useState(false);
+
+  const addChip = (raw: string) => {
+    const trimmed = raw.trim().replace(/,$/, "").trim();
+    if (!trimmed || chips.includes(trimmed) || chips.length >= MAX_CHIPS) {
+      setVal("");
+      return;
+    }
+    onChange([...chips, trimmed]);
+    setVal("");
+  };
+
+  const removeChip = (i: number) => {
+    onChange(chips.filter((_, idx) => idx !== i));
+    inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addChip(val);
+    } else if (e.key === "Backspace" && !val && chips.length > 0) {
+      onChange(chips.slice(0, -1));
+    }
+  };
+
+  const hasContent = chips.length > 0 || val.length > 0;
+
+  return (
+    <div
+      onClick={() => inputRef.current?.focus()}
+      style={{
+        display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center",
+        padding: "10px 14px", minHeight: 52,
+        background: "rgba(255,255,255,0.04)",
+        border: `1px solid ${focused || hasContent ? Gb : "rgba(255,255,255,0.1)"}`,
+        borderRadius: 12, cursor: "text", transition: "border-color 0.2s",
+      }}
+    >
+      {/* Chips */}
+      {chips.map((chip, i) => (
+        <span key={i} style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          background: Gs, border: `1px solid ${Gb}`,
+          borderRadius: 999, padding: "3px 10px",
+          fontFamily: "var(--font-inter), sans-serif", fontSize: 13,
+          color: G, fontWeight: 500, whiteSpace: "nowrap",
+        }}>
+          {chip}
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); removeChip(i); }}
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: G, fontSize: 16, lineHeight: 1, padding: 0,
+              display: "flex", alignItems: "center",
+            }}
+          >
+            ×
+          </button>
+        </span>
+      ))}
+
+      {/* Text input */}
+      {chips.length < MAX_CHIPS && (
+        <input
+          ref={inputRef}
+          type="text"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={() => { setFocused(false); if (val.trim()) addChip(val); }}
+          onFocus={() => setFocused(true)}
+          placeholder={chips.length === 0
+            ? "pizza a domicilio bogotá, restaurante italiano chapinero"
+            : chips.length < MAX_CHIPS ? "Añadir frase…" : ""}
+          style={{
+            background: "transparent", border: "none", outline: "none",
+            flex: 1, minWidth: 200,
+            color: "#fff", fontFamily: "var(--font-inter), sans-serif", fontSize: 15,
+          }}
+        />
+      )}
+      {chips.length >= MAX_CHIPS && (
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter), sans-serif" }}>
+          Máximo {MAX_CHIPS} frases
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── Audit form ────────────────────────────────────────────────────────────────
+function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
+  const [domain,      setDomain]      = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [keywords,    setKeywords]    = useState<string[]>([]);
+  const [countryCode, setCountryCode] = useState(2170);
+  const [googleBiz,   setGoogleBiz]   = useState("");
+  const [expanded,    setExpanded]    = useState(false);
+
+  const domainOk   = isDomainValid(domain);
+  const bizOk      = businessName.trim().length > 0;
+  const canSubmit  = domainOk && bizOk;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    onSubmit({
+      domain: domain.trim(),
+      businessName: businessName.trim(),
+      keywords,
+      countryCode,
+      googleBusiness: googleBiz.trim(),
+    });
+  };
+
+  return (
+    <div style={{ maxWidth: 560, margin: "0 auto", padding: "56px 24px 48px", textAlign: "center" }}>
+
+      {/* Kicker */}
+      <div style={{ fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 20, marginBottom: 12 }}>
+        Auditoría digital
+      </div>
+
+      {/* Headline */}
+      <h1 style={{
+        fontFamily: "var(--font-syne), sans-serif", fontWeight: 800,
+        fontSize: "clamp(28px, 4vw, 46px)", color: "#fff",
+        letterSpacing: "-0.03em", lineHeight: 1.05, marginBottom: 16,
+      }}>
+        ¿Cómo te ve Google?
+      </h1>
+
+      {/* Subhead */}
+      <p style={{
+        fontFamily: "var(--font-inter), sans-serif", fontSize: 16,
+        color: "rgba(255,255,255,0.45)", marginBottom: 40, lineHeight: 1.65,
+      }}>
+        En 90 segundos analizamos tu presencia en Google: SEO, velocidad,
+        perfil de negocio y posicionamiento. Recibes un reporte con prioridades claras.
+      </p>
+
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12, textAlign: "left" }}>
+
+        {/* Dominio */}
+        <div style={{ position: "relative" }}>
+          <input
+            type="text"
+            value={domain}
+            onChange={e => setDomain(e.target.value)}
+            placeholder="tudominio.com"
+            autoComplete="off"
+            style={inputStyle(isDomainValid(domain))}
+            onFocus={e => { e.target.style.borderColor = Gb; }}
+            onBlur={e => { if (!isDomainValid(domain)) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
+          />
+          {/* Green check when domain looks valid */}
+          {domainOk && (
+            <div style={{
+              position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
+              width: 20, height: 20, borderRadius: "50%",
+              background: Gs, border: `1px solid ${Gb}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width={11} height={11} viewBox="0 0 11 11" fill="none"
+                   stroke={G} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="2 5.5 4.5 8 9 3"/>
+              </svg>
+            </div>
+          )}
+        </div>
+
+        {/* Nombre del negocio */}
+        <input
+          type="text"
+          value={businessName}
+          onChange={e => setBusinessName(e.target.value)}
+          placeholder="Nombre de tu negocio"
+          autoComplete="off"
+          style={inputStyle(bizOk)}
+          onFocus={e => { e.target.style.borderColor = Gb; }}
+          onBlur={e => { if (!bizOk) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
+        />
+
+        {/* Collapsible: Más detalles */}
+        <button
+          type="button"
+          onClick={() => setExpanded(e => !e)}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "10px 14px", borderRadius: 10,
+            background: expanded ? Gs : "rgba(255,255,255,0.025)",
+            border: `1px solid ${expanded ? Gb : "rgba(255,255,255,0.08)"}`,
+            color: expanded ? G : "rgba(255,255,255,0.45)",
+            fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 500,
+            cursor: "pointer", transition: "all 0.2s",
+          }}
+        >
+          <span>Más detalles (opcional)</span>
+          <svg
+            width={14} height={14} viewBox="0 0 14 14" fill="none"
+            stroke="currentColor" strokeWidth={1.6} strokeLinecap="round"
+            style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}
+          >
+            <polyline points="3 5 7 9 11 5"/>
+          </svg>
+        </button>
+
+        {expanded && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+
+            {/* Keywords chip input */}
+            <div>
+              <label style={{
+                display: "block", marginBottom: 6,
+                fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
+                color: "rgba(255,255,255,0.4)", fontWeight: 500,
+                letterSpacing: "0.04em", textTransform: "uppercase",
+              }}>
+                ¿Cómo te buscaría un cliente en Google?
+              </label>
+              <ChipInput chips={keywords} onChange={setKeywords} />
+              <p style={{
+                marginTop: 6, fontSize: 11,
+                color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter), sans-serif",
+              }}>
+                Presiona Enter o coma para agregar cada frase · Máximo {MAX_CHIPS}
+              </p>
+            </div>
+
+            {/* País */}
+            <div>
+              <label style={{
+                display: "block", marginBottom: 6,
+                fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
+                color: "rgba(255,255,255,0.4)", fontWeight: 500,
+                letterSpacing: "0.04em", textTransform: "uppercase",
+              }}>
+                ¿Dónde están tus clientes?
+              </label>
+              <div style={{ position: "relative" }}>
+                <select
+                  value={countryCode}
+                  onChange={e => setCountryCode(Number(e.target.value))}
+                  style={{
+                    width: "100%", padding: "14px 18px",
+                    background: "#111", border: `1px solid ${Gb}`,
+                    borderRadius: 12, color: "#fff",
+                    fontFamily: "var(--font-inter), sans-serif", fontSize: 15,
+                    outline: "none", appearance: "none", cursor: "pointer",
+                  }}
+                >
+                  {COUNTRIES.map(c => (
+                    <option key={c.code} value={c.code}>{c.label}</option>
+                  ))}
+                </select>
+                <div style={{
+                  position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
+                  pointerEvents: "none",
+                }}>
+                  <svg width={14} height={14} viewBox="0 0 14 14" fill="none"
+                       stroke="rgba(255,255,255,0.4)" strokeWidth={1.6} strokeLinecap="round">
+                    <polyline points="3 5 7 9 11 5"/>
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {/* Google Business */}
+            <div>
+              <label style={{
+                display: "block", marginBottom: 6,
+                fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
+                color: "rgba(255,255,255,0.4)", fontWeight: 500,
+                letterSpacing: "0.04em", textTransform: "uppercase",
+              }}>
+                ¿Tienes perfil en Google Maps?
+              </label>
+              <input
+                type="url"
+                value={googleBiz}
+                onChange={e => setGoogleBiz(e.target.value)}
+                placeholder="https://maps.google.com/?cid=..."
+                autoComplete="off"
+                style={inputStyle(googleBiz.length > 0)}
+                onFocus={e => { e.target.style.borderColor = Gb; }}
+                onBlur={e => { if (!googleBiz) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
+              />
+              <p style={{
+                marginTop: 6, fontSize: 11,
+                color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter), sans-serif",
+              }}>
+                Pega el link de tu negocio en Google Maps · Opcional
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* CTA */}
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          style={{
+            marginTop: 4,
+            padding: "15px 32px", borderRadius: 12, border: "none",
+            background: canSubmit ? G : "rgba(93,184,72,0.25)",
+            color: "#0a0a0a",
+            fontFamily: "var(--font-inter), sans-serif", fontWeight: 700, fontSize: 16,
+            cursor: canSubmit ? "pointer" : "default", transition: "all 0.15s",
+          }}
+          onMouseEnter={e => {
+            if (canSubmit) {
+              e.currentTarget.style.transform = "translateY(-1px)";
+              e.currentTarget.style.boxShadow = "0 8px 30px rgba(93,184,72,0.4)";
+            }
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "none";
+          }}
+        >
+          Generar mi reporte →
+        </button>
+
+        {/* Helper text */}
+        <p style={{
+          textAlign: "center", fontSize: 12, marginTop: 4,
+          color: "rgba(255,255,255,0.28)",
+          fontFamily: "var(--font-inter), sans-serif", lineHeight: 1.6,
+        }}>
+          Sin tarjeta de crédito · Resultados en ~90 segundos · Cancela cuando quieras
+        </p>
+      </form>
+    </div>
+  );
+}
+
+// ── Scanning card ─────────────────────────────────────────────────────────────
+function ScanningCard({ domain, businessName }: { domain: string; businessName: string }) {
   const steps = [
     "Consultando DataForSEO SERP API…",
     "Analizando resultados orgánicos…",
     "Detectando funciones SERP…",
-    "Calculando posiciones…",
+    "Calculando posiciones y competidores…",
   ];
   const [step] = useState(0);
 
@@ -59,7 +447,6 @@ function ScanningCard({ domain, keyword }: { domain: string; keyword: string }) 
       borderRadius: 20, padding: "40px 36px",
       textAlign: "center",
     }}>
-      {/* Animated logo */}
       <div style={{
         width: 56, height: 56, borderRadius: 16,
         background: Gs, border: `1px solid ${Gb}`,
@@ -73,25 +460,26 @@ function ScanningCard({ domain, keyword }: { domain: string; keyword: string }) 
         </svg>
       </div>
 
-      <div style={{
-        fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 18, marginBottom: 8,
-      }}>
-        Analizando SERP
+      <div style={{ fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 18, marginBottom: 8 }}>
+        Generando tu reporte
       </div>
       <div style={{
         fontFamily: "var(--font-syne), sans-serif", fontWeight: 700,
-        fontSize: 20, color: "#fff", marginBottom: 8, letterSpacing: "-0.02em",
+        fontSize: 20, color: "#fff", marginBottom: 4, letterSpacing: "-0.02em",
+      }}>
+        {businessName}
+      </div>
+      <div style={{
+        fontFamily: "var(--font-mono), monospace", fontSize: 13,
+        color: "rgba(255,255,255,0.4)", marginBottom: 28,
       }}>
         {domain}
-        {keyword && (
-          <span style={{ color: "rgba(255,255,255,0.45)", fontWeight: 400 }}> · {keyword}</span>
-        )}
       </div>
       <div style={{
         fontFamily: "var(--font-inter), sans-serif", fontSize: 13,
-        color: "rgba(255,255,255,0.45)", marginBottom: 32, lineHeight: 1.6,
+        color: "rgba(255,255,255,0.35)", marginBottom: 32,
       }}>
-        ~20 segundos · datos en tiempo real de Google
+        ~90 segundos · datos en tiempo real de Google
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
@@ -128,162 +516,41 @@ function ScanningCard({ domain, keyword }: { domain: string; keyword: string }) 
   );
 }
 
-// ── Input form ────────────────────────────────────────────────────────────────
-function AuditForm({ onSubmit, loading }: {
-  onSubmit: (domain: string, keyword: string) => void;
-  loading: boolean;
-}) {
-  const [domain, setDomain]   = useState("");
-  const [keyword, setKeyword] = useState("");
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!domain.trim() || loading) return;
-    onSubmit(domain.trim(), keyword.trim());
-  };
-
-  return (
-    <div style={{
-      maxWidth: 600, margin: "0 auto",
-      padding: "60px 24px 40px",
-      textAlign: "center",
-    }}>
-      <div style={{ fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 20, marginBottom: 12 }}>
-        Análisis SERP
-      </div>
-      <h1 style={{
-        fontFamily: "var(--font-syne), sans-serif", fontWeight: 800,
-        fontSize: "clamp(28px, 4vw, 44px)", color: "#fff",
-        letterSpacing: "-0.03em", lineHeight: 1.1, marginBottom: 12,
-      }}>
-        ¿Cómo te ve Google?
-      </h1>
-      <p style={{
-        fontFamily: "var(--font-inter), sans-serif", fontSize: 16,
-        color: "rgba(255,255,255,0.45)", marginBottom: 40, lineHeight: 1.6,
-      }}>
-        Ingresa tu dominio y la keyword principal de tu negocio.
-        EDA analiza los resultados reales de Google en segundos.
-      </p>
-
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        {/* Domain input */}
-        <div style={{ position: "relative" }}>
-          <input
-            type="text"
-            value={domain}
-            onChange={e => setDomain(e.target.value)}
-            placeholder="tudominio.com"
-            autoComplete="off"
-            style={{
-              width: "100%", padding: "14px 18px",
-              background: "rgba(255,255,255,0.04)",
-              border: `1px solid ${domain ? Gb : "rgba(255,255,255,0.1)"}`,
-              borderRadius: 12, color: "#fff",
-              fontFamily: "var(--font-inter), sans-serif", fontSize: 16,
-              outline: "none", transition: "border-color 0.2s",
-            }}
-            onFocus={e => { e.target.style.borderColor = Gb; }}
-            onBlur={e => { if (!domain) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
-          />
-        </div>
-
-        {/* Keyword input */}
-        <div style={{ position: "relative" }}>
-          <input
-            type="text"
-            value={keyword}
-            onChange={e => setKeyword(e.target.value)}
-            placeholder="keyword principal (opcional)"
-            autoComplete="off"
-            style={{
-              width: "100%", padding: "14px 18px",
-              background: "rgba(255,255,255,0.04)",
-              border: `1px solid ${keyword ? Gb : "rgba(255,255,255,0.1)"}`,
-              borderRadius: 12, color: "#fff",
-              fontFamily: "var(--font-inter), sans-serif", fontSize: 16,
-              outline: "none", transition: "border-color 0.2s",
-            }}
-            onFocus={e => { e.target.style.borderColor = Gb; }}
-            onBlur={e => { if (!keyword) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={!domain.trim() || loading}
-          style={{
-            padding: "14px 32px", borderRadius: 12, border: "none",
-            background: !domain.trim() || loading ? "rgba(93,184,72,0.3)" : G,
-            color: "#0a0a0a", fontFamily: "var(--font-inter), sans-serif",
-            fontWeight: 700, fontSize: 16, cursor: domain.trim() && !loading ? "pointer" : "default",
-            transition: "all 0.15s",
-          }}
-          onMouseEnter={e => {
-            if (domain.trim() && !loading) {
-              e.currentTarget.style.transform = "translateY(-1px)";
-              e.currentTarget.style.boxShadow = "0 8px 30px rgba(93,184,72,0.4)";
-            }
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "none";
-          }}
-        >
-          {loading ? "Analizando…" : "Analizar SERP →"}
-        </button>
-      </form>
-    </div>
-  );
-}
-
 // ── Top bar ───────────────────────────────────────────────────────────────────
-function TopBar({ domain, keyword, onReset }: {
+function TopBar({ domain, businessName, onReset }: {
   domain: string;
-  keyword: string;
+  businessName: string;
   onReset: () => void;
 }) {
   return (
     <div style={{
       position: "sticky", top: 0, zIndex: 50,
-      background: "rgba(10,10,10,0.9)",
-      backdropFilter: "blur(12px)",
+      background: "rgba(10,10,10,0.9)", backdropFilter: "blur(12px)",
       borderBottom: "1px solid rgba(255,255,255,0.07)",
       padding: "12px 32px",
-      display: "flex", alignItems: "center",
-      justifyContent: "space-between", gap: 16,
+      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           <Image src="/logo_eda_sin_background.png" alt="EDA" width={28} height={28} />
           <Image src="/eda.png" alt="EDA" width={40} height={16} style={{ filter: "brightness(0) invert(1)" }} />
         </div>
-        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)", flexShrink: 0 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <span style={{
-            fontFamily: "var(--font-inter), sans-serif", fontSize: 13,
-            color: "rgba(255,255,255,0.5)",
+            fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 600,
+            color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
-            SERP
+            {businessName}
           </span>
-          <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 13 }}>·</span>
+          <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 13, flexShrink: 0 }}>·</span>
           <span style={{
-            fontFamily: "var(--font-mono), monospace", fontSize: 13,
-            color: "#fff",
+            fontFamily: "var(--font-mono), monospace", fontSize: 12,
+            color: "rgba(255,255,255,0.45)",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           }}>
             {domain}
           </span>
-          {keyword && (
-            <>
-              <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 13 }}>·</span>
-              <span style={{
-                fontFamily: "var(--font-inter), sans-serif", fontSize: 13,
-                color: "rgba(255,255,255,0.5)",
-              }}>
-                "{keyword}"
-              </span>
-            </>
-          )}
         </div>
       </div>
 
@@ -291,11 +558,10 @@ function TopBar({ domain, keyword, onReset }: {
         onClick={onReset}
         style={{
           padding: "7px 14px", borderRadius: 8,
-          background: "rgba(255,255,255,0.05)",
-          border: "1px solid rgba(255,255,255,0.1)",
+          background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
           color: "rgba(255,255,255,0.6)",
           fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 500,
-          cursor: "pointer", transition: "all 0.15s",
+          cursor: "pointer", transition: "all 0.15s", flexShrink: 0,
         }}
         onMouseEnter={e => {
           e.currentTarget.style.background = Gs;
@@ -319,8 +585,7 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
   return (
     <div style={{
       maxWidth: 480, margin: "80px auto", padding: "40px 36px",
-      background: "rgba(239,68,68,0.06)",
-      border: "1px solid rgba(239,68,68,0.3)",
+      background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.3)",
       borderRadius: 20, textAlign: "center",
     }}>
       <div style={{
@@ -340,8 +605,7 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
         style={{
           padding: "10px 24px", borderRadius: 10, border: "none",
           background: G, color: "#0a0a0a",
-          fontFamily: "var(--font-inter), sans-serif", fontWeight: 700,
-          fontSize: 14, cursor: "pointer",
+          fontFamily: "var(--font-inter), sans-serif", fontWeight: 700, fontSize: 14, cursor: "pointer",
         }}
       >
         Intentar de nuevo
@@ -354,21 +618,20 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
 type Phase = "input" | "scanning" | "result" | "error";
 
 export default function DashboardPage() {
-  const [phase, setPhase]       = useState<Phase>("input");
-  const [domain, setDomain]     = useState("");
-  const [keyword, setKeyword]   = useState("");
+  const [phase,    setPhase]    = useState<Phase>("input");
+  const [lastForm, setLastForm] = useState<AuditFormData | null>(null);
   const [serpData, setSerpData] = useState<SerpData | null>(null);
-  const [errMsg, setErrMsg]     = useState("");
+  const [errMsg,   setErrMsg]   = useState("");
 
-  const runAudit = useCallback(async (d: string, kw: string) => {
-    setDomain(d);
-    setKeyword(kw);
+  const runAudit = useCallback(async (data: AuditFormData) => {
+    setLastForm(data);
     setPhase("scanning");
     setSerpData(null);
     setErrMsg("");
 
     try {
-      const { job_id, status, cached } = await triggerAudit(d, kw);
+      const keyword = data.keywords[0] || undefined;
+      const { job_id, status, cached } = await triggerAudit(data.domain, keyword);
 
       let result: DashboardAuditResult;
       if (status === "completed" && cached) {
@@ -393,20 +656,19 @@ export default function DashboardPage() {
   }, []);
 
   const handleSearchAgain = useCallback((kw: string) => {
-    runAudit(domain, kw);
-  }, [domain, runAudit]);
+    if (lastForm) runAudit({ ...lastForm, keywords: [kw] });
+  }, [lastForm, runAudit]);
 
   const handleReset = () => {
     setPhase("input");
     setSerpData(null);
-    setDomain("");
-    setKeyword("");
+    setLastForm(null);
     setErrMsg("");
   };
 
   return (
     <div style={{ minHeight: "100vh", background: "#0a0a0a", position: "relative" }}>
-      {/* Dot grid background */}
+      {/* Dot grid */}
       <div style={{
         position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
         backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px)",
@@ -416,15 +678,9 @@ export default function DashboardPage() {
       }} />
 
       <div style={{ position: "relative", zIndex: 1 }}>
-        {/* Top bar (solo en result/error) */}
-        {(phase === "result" || phase === "error") && (
-          <TopBar domain={domain} keyword={keyword} onReset={handleReset} />
-        )}
 
-        {/* Content */}
         {phase === "input" && (
           <>
-            {/* Minimal nav for input phase */}
             <div style={{
               padding: "20px 32px",
               display: "flex", alignItems: "center", gap: 10,
@@ -441,23 +697,27 @@ export default function DashboardPage() {
                 Dashboard
               </span>
             </div>
-            <AuditForm onSubmit={runAudit} loading={false} />
+            <AuditForm onSubmit={runAudit} />
           </>
         )}
 
-        {phase === "scanning" && (
-          <ScanningCard domain={domain} keyword={keyword} />
+        {phase === "scanning" && lastForm && (
+          <ScanningCard domain={lastForm.domain} businessName={lastForm.businessName} />
         )}
 
-        {phase === "result" && serpData && (
-          <div style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 32px 60px" }}>
-            <SerpSection data={serpData} onSearchAgain={handleSearchAgain} />
-          </div>
+        {phase === "result" && serpData && lastForm && (
+          <>
+            <TopBar domain={lastForm.domain} businessName={lastForm.businessName} onReset={handleReset} />
+            <div style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 32px 60px" }}>
+              <SerpSection data={serpData} onSearchAgain={handleSearchAgain} />
+            </div>
+          </>
         )}
 
         {phase === "error" && (
           <ErrorCard message={errMsg} onRetry={handleReset} />
         )}
+
       </div>
     </div>
   );
