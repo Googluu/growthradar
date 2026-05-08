@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Syne, DM_Sans, Caveat, Inter } from "next/font/google";
+import { Syne, DM_Sans, Caveat, Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/lib/theme";
 import "./globals.css";
 
@@ -31,6 +31,13 @@ const inter = Inter({
   display: "swap",
 });
 
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "EDA — Evalúa. Descubre. Alcanza.",
   description:
@@ -47,7 +54,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" data-theme="dark" className={`${syne.variable} ${dmSans.variable} ${caveat.variable} ${inter.variable}`}>
+    <html lang="es" data-theme="dark" className={`${syne.variable} ${dmSans.variable} ${caveat.variable} ${inter.variable} ${jetbrainsMono.variable}`}>
       <body>
         <ThemeProvider>{children}</ThemeProvider>
       </body>

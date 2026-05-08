@@ -42,6 +42,7 @@
   --font-dm-sans:  var(--font-dm-sans);
   --font-caveat:   var(--font-caveat);
   --font-inter:    var(--font-inter);
+  --font-mono:     var(--font-mono);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -56,6 +57,11 @@ body {
 }
 
 /* ── ANIMATIONS ── */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1; }
+}
+
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(28px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -292,4 +298,75 @@ input::placeholder { color: var(--txt-faint); }
 }
 @media (max-width: 500px) {
   .footer-grid { grid-template-columns: 1fr; gap: 24px; }
+}
+
+/* ── DASHBOARD SERP SECTION ── */
+
+/* Keyword highlight in result descriptions */
+mark {
+  background: rgba(93, 184, 72, 0.18);
+  color: #5DB848;
+  padding: 0 3px;
+  border-radius: 3px;
+  font-weight: 500;
+  font-style: normal;
+}
+
+/* Horizontal scroll for AI Overview source chips */
+.chip-scroll::-webkit-scrollbar { height: 6px; }
+.chip-scroll::-webkit-scrollbar-track { background: transparent; }
+.chip-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+/* KPI grid: 4-col → 2-col → 1-col */
+.serp-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+@media (max-width: 1024px) {
+  .serp-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 640px) {
+  .serp-kpi-grid { grid-template-columns: 1fr; }
+}
+
+/* Ranking + Top domains: 2-col → 1-col */
+.serp-ranking-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+@media (max-width: 1024px) {
+  .serp-ranking-grid { grid-template-columns: 1fr; }
+}
+
+/* Results + sidebar: 1fr 320px → 1-col */
+.serp-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+  align-items: flex-start;
+}
+@media (max-width: 1024px) {
+  .serp-main-grid { grid-template-columns: 1fr; }
+}
+
+/* Footer stats: row → column on mobile */
+.serp-footer-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .serp-footer-stats { flex-direction: column; align-items: stretch; gap: 16px; }
+}
+
+/* Results table: hide optional columns on mobile */
+@media (max-width: 640px) {
+  .serp-results-table th:nth-child(4),
+  .serp-results-table td:nth-child(4) { display: none; }
 }

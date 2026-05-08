@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EDA — Análisis SERP</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: #0a0a0a;
+      color: #fff;
+      min-height: 100vh;
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0a0a0a; }
+    ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+    mark {
+      background: rgba(34, 197, 94, 0.18);
+      color: #4ade80;
+      padding: 0 3px;
+      border-radius: 3px;
+      font-weight: 500;
+    }
+
+    .chip-scroll::-webkit-scrollbar { height: 6px; }
+
+    @keyframes pulse-soft {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+
+    @media (max-width: 1024px) {
+      .main-grid { grid-template-columns: 1fr !important; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; }
+      .ranking-grid { grid-template-columns: 1fr !important; }
+    }
+    @media (max-width: 640px) {
+      .kpi-grid { grid-template-columns: 1fr !important; }
+      .footer-stats { flex-direction: column !important; align-items: stretch !important; gap: 16px !important; }
+      .results-table th:nth-child(4), .results-table td:nth-child(4) { display: none; }
+      .results-table th:nth-child(5), .results-table td:nth-child(5) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+const { useState, useMemo } = React;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sample data — matches the SerpData interface from the brief
+// ─────────────────────────────────────────────────────────────────────────────
+const sampleData = {
+  keyword: "pizzería a domicilio bogotá",
+  datetime: "2026-05-06T14:23:11Z",
+  check_url: "https://www.google.com/search?q=pizzer%C3%ADa+a+domicilio+bogot%C3%A1",
+  total_results_google: 4_820_000,
+  organic_results_count: 9,
+  serp_features: ["ai_overview", "featured_snippet", "people_also_ask", "local_pack", "related_searches", "sitelinks"],
+  serp_features_count: 6,
+  has_ai_overview: true,
+  average_position: 14.2,
+  ranking_distribution: { top_3: 3, top_10: 7, top_20: 9, top_100: 9 },
+  top_3_domains: ["dominospizza.com.co", "papajohns.com.co", "jenospizza.com"],
+  top_10_domains: [
+    "dominospizza.com.co",
+    "papajohns.com.co",
+    "jenospizza.com",
+    "rappi.com.co",
+    "didiyummy.com",
+    "pizzeriadonmario.co",
+    "tripadvisor.com.co",
+    "ifood.com.co",
+    "pizzahut.com.co",
+    "elpoli.com.co",
+  ],
+  featured_snippet_domain: "rappi.com.co",
+  target_visibility: {
+    domain: "pizzeriadonmario.co",
+    found: true,
+    position: 6,
+    url: "https://pizzeriadonmario.co/menu/domicilios",
+    in_top_3: false,
+    in_top_10: true,
+    is_featured_snippet: false,
+  },
+  organic_results: [
+    {
+      rank_absolute: 1, title: "Pizza a domicilio en Bogotá — Domino's Pizza Colombia",
+      url: "https://www.dominospizza.com.co/bogota", domain: "dominospizza.com.co",
+      description: "Ordena tu pizza favorita a domicilio en Bogotá. Promociones 2x1, masa fresca y entrega en 30 minutos o gratis.",
+      breadcrumb: "dominospizza.com.co › bogota",
+      is_featured_snippet: false,
+      sitelinks: [
+        { title: "Menú", url: "#", description: "Pizzas, bebidas y postres" },
+        { title: "Promociones", url: "#", description: "2x1 todos los martes" },
+        { title: "Sucursales", url: "#", description: "Encuentra la más cercana" },
+      ],
+      highlighted: ["pizza", "domicilio", "Bogotá"],
+    },
+    {
+      rank_absolute: 2, title: "Papa John's Colombia — Pizza a domicilio en Bogotá",
+      url: "https://www.papajohns.com.co/bogota", domain: "papajohns.com.co",
+      description: "Mejores ingredientes, mejor pizza. Domicilios en toda Bogotá con masa artesanal y entrega rápida.",
+      breadcrumb: "papajohns.com.co › bogota",
+      is_featured_snippet: false,
+      sitelinks: [],
+      highlighted: ["Pizza", "domicilio", "Bogotá"],
+    },
+    {
+      rank_absolute: 3, title: "Las 10 mejores pizzerías a domicilio en Bogotá 2026",
+      url: "https://rappi.com.co/blog/mejores-pizzerias-bogota", domain: "rappi.com.co",
+      description: "Top 10 pizzerías con domicilio en Bogotá según los pedidos en Rappi. Reseñas, precios y tiempos de entrega.",
+      breadcrumb: "rappi.com.co › blog › mejores-pizzerias",
+      is_featured_snippet: true,
+      sitelinks: [],
+      highlighted: ["pizzerías", "domicilio", "Bogotá"],
+    },
+    {
+      rank_absolute: 4, title: "Jeno's Pizza — Domicilios en Bogotá",
+      url: "https://jenospizza.com/domicilios", domain: "jenospizza.com",
+      description: "La pizza colombiana de toda la vida. Pide a domicilio en Bogotá: combos familiares, masa delgada y promociones.",
+      breadcrumb: "jenospizza.com › domicilios",
+      is_featured_snippet: false,
+      sitelinks: [
+        { title: "Menú", url: "#", description: "" },
+        { title: "Combos", url: "#", description: "" },
+      ],
+      highlighted: ["pizza", "domicilios", "Bogotá"],
+    },
+    {
+      rank_absolute: 5, title: "DiDi Yummy — Pide pizza a domicilio en Bogotá",
+      url: "https://didiyummy.com/co/bogota/pizza", domain: "didiyummy.com",
+      description: "Restaurantes de pizza con domicilio cerca de ti en Bogotá. Cupones de descuento y entrega en menos de 40 min.",
+      breadcrumb: "didiyummy.com › co › bogota › pizza",
+      is_featured_snippet: false,
+      sitelinks: [],
+      highlighted: ["pizza", "domicilio", "Bogotá"],
+    },
+    {
+      rank_absolute: 6, title: "Pizzería Don Mario — Domicilios en Chapinero y Usaquén",
+      url: "https://pizzeriadonmario.co/menu/domicilios", domain: "pizzeriadonmario.co",
+      description: "Pizza artesanal hecha en horno de leña. Domicilios en Bogotá: Chapinero, Usaquén y zona norte. Masa madre 48h.",
+      breadcrumb: "pizzeriadonmario.co › menu › domicilios",
+      is_featured_snippet: false,
+      sitelinks: [
+        { title: "Menú", url: "#", description: "Pizzas artesanales y entradas" },
+        { title: "Zonas", url: "#", description: "Cobertura de domicilios" },
+      ],
+      highlighted: ["Pizza", "Domicilios", "Bogotá"],
+    },
+    {
+      rank_absolute: 7, title: "Las mejores pizzerías de Bogotá según viajeros — Tripadvisor",
+      url: "https://www.tripadvisor.com.co/Restaurants-pizza-bogota", domain: "tripadvisor.com.co",
+      description: "Reseñas y opiniones de viajeros sobre las mejores pizzerías de Bogotá. Encuentra la pizza perfecta cerca de ti.",
+      breadcrumb: "tripadvisor.com.co › Restaurants",
+      is_featured_snippet: false,
+      sitelinks: [],
+      highlighted: ["pizzerías", "Bogotá"],
+    },
+    {
+      rank_absolute: 8, title: "iFood Colombia — Pizza a domicilio en Bogotá",
+      url: "https://ifood.com.co/bogota/pizza", domain: "ifood.com.co",
+      description: "Pide pizza online en Bogotá. Cientos de restaurantes con domicilio rápido y promociones diarias.",
+      breadcrumb: "ifood.com.co › bogota › pizza",
+      is_featured_snippet: false,
+      sitelinks: [],
+      highlighted: ["pizza", "domicilio", "Bogotá"],
+    },
+    {
+      rank_absolute: 9, title: "Pizza Hut Colombia — Bogotá",
+      url: "https://pizzahut.com.co/bogota", domain: "pizzahut.com.co",
+      description: "Pizza Hut Bogotá: pide a domicilio, recoge en sucursal o come en restaurante. Promos pizzas grandes desde $25.900.",
+      breadcrumb: "pizzahut.com.co › bogota",
+      is_featured_snippet: false,
+      sitelinks: [],
+      highlighted: ["Pizza", "domicilio", "Bogotá"],
+    },
+  ],
+  ai_overview: {
+    markdown: "Las **pizzerías con domicilio en Bogotá** más populares incluyen cadenas internacionales como Domino's y Papa John's, junto con marcas locales como Jeno's Pizza y Pizzería Don Mario. Para encontrar opciones cerca de ti, puedes usar plataformas como **Rappi**, **DiDi Yummy** o **iFood**, que permiten comparar precios, tiempos de entrega y reseñas en tiempo real.\n\nLas **zonas con mayor cobertura** son Chapinero, Usaquén, Zona T y Centro Internacional. Los tiempos promedio de entrega están entre 30 y 45 minutos.",
+    references: [
+      { domain: "dominospizza.com.co", url: "https://dominospizza.com.co", title: "Domino's Pizza Colombia", source: "Domino's" },
+      { domain: "rappi.com.co", url: "https://rappi.com.co/blog", title: "Top pizzerías 2026", source: "Rappi Blog" },
+      { domain: "jenospizza.com", url: "https://jenospizza.com", title: "Jeno's Pizza", source: "Jeno's" },
+      { domain: "didiyummy.com", url: "https://didiyummy.com/co", title: "DiDi Yummy Colombia", source: "DiDi Yummy" },
+      { domain: "tripadvisor.com.co", url: "https://tripadvisor.com.co", title: "Mejores pizzerías Bogotá", source: "Tripadvisor" },
+    ],
+    references_count: 5,
+  },
+  related_searches: [
+    "mejor pizza a domicilio bogotá",
+    "pizza barata bogotá domicilio",
+    "pizzería 24 horas bogotá",
+    "pizza artesanal bogotá",
+    "domicilios pizza chapinero",
+    "pizza vegana bogotá",
+    "promociones pizza bogotá hoy",
+  ],
+  perspectives: [
+    { title: "Probé las 5 pizzerías más pedidas en Bogotá", url: "#", domain: "youtube.com", source: "YouTube — @comidacolombiana", date: "hace 2 semanas" },
+    { title: "Reseña: Pizzería Don Mario vs Jeno's", url: "#", domain: "instagram.com", source: "Instagram — @bogotaeats", date: "hace 1 mes" },
+  ],
+  cost: 0.0034,
+  task_time: "2.18s",
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inline icons (lucide-style)
+// ─────────────────────────────────────────────────────────────────────────────
+const Icon = ({ d, size = 16, stroke = 'currentColor', fill = 'none', sw = 1.6, children }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={stroke}
+       strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    {d ? <path d={d} /> : children}
+  </svg>
+);
+
+const IconTrendingUp = (p) => <Icon {...p}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></Icon>;
+const IconLayers     = (p) => <Icon {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></Icon>;
+const IconList       = (p) => <Icon {...p}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></Icon>;
+const IconTarget     = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></Icon>;
+const IconBrain      = (p) => <Icon {...p}><path d="M12 2a4 4 0 0 0-4 4v0a4 4 0 0 0-2 7.5A4 4 0 0 0 8 21a4 4 0 0 0 4-2 4 4 0 0 0 4 2 4 4 0 0 0 2-7.5A4 4 0 0 0 16 6a4 4 0 0 0-4-4z"/><path d="M12 6v15"/></Icon>;
+const IconStar       = (p) => <Icon {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></Icon>;
+const IconExternal   = (p) => <Icon {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></Icon>;
+const IconClock      = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>;
+const IconDollar     = (p) => <Icon {...p}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></Icon>;
+const IconCalendar   = (p) => <Icon {...p}><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></Icon>;
+const IconSearch     = (p) => <Icon {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Icon>;
+const IconCheck      = (p) => <Icon {...p}><polyline points="20 6 9 17 4 12"/></Icon>;
+const IconX          = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>;
+const IconChevronRt  = (p) => <Icon {...p}><polyline points="9 18 15 12 9 6"/></Icon>;
+const IconArrowDown  = (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></Icon>;
+const IconArrowUp    = (p) => <Icon {...p}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></Icon>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Design tokens
+// ─────────────────────────────────────────────────────────────────────────────
+const C = {
+  bg: '#0a0a0a',
+  bg2: '#111',
+  card: 'rgba(255,255,255,0.025)',
+  cardHover: 'rgba(255,255,255,0.04)',
+  border: 'rgba(255,255,255,0.07)',
+  borderStrong: 'rgba(255,255,255,0.14)',
+  text: '#fff',
+  text2: 'rgba(255,255,255,0.65)',
+  text3: 'rgba(255,255,255,0.45)',
+  text4: 'rgba(255,255,255,0.3)',
+  green: '#22c55e',
+  greenSoft: 'rgba(34,197,94,0.15)',
+  greenBorder: 'rgba(34,197,94,0.35)',
+  yellow: '#fbbf24',
+  red: '#ef4444',
+  blue: '#60a5fa',
+};
+
+const fav = (domain) => `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+const fmtNum = (n) => n.toLocaleString('es-CO');
+const fmtDate = (iso) => {
+  const d = new Date(iso);
+  return d.toLocaleString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Building blocks
+// ─────────────────────────────────────────────────────────────────────────────
+function Card({ children, style, ...rest }) {
+  return (
+    <div style={{
+      background: C.card,
+      border: `1px solid ${C.border}`,
+      borderRadius: 16,
+      ...style,
+    }} {...rest}>{children}</div>
+  );
+}
+
+function Badge({ children, tone = 'default', style }) {
+  const tones = {
+    default: { bg: 'rgba(255,255,255,0.06)', fg: C.text2, br: 'rgba(255,255,255,0.1)' },
+    green:   { bg: C.greenSoft, fg: C.green, br: C.greenBorder },
+    yellow:  { bg: 'rgba(251,191,36,0.12)', fg: C.yellow, br: 'rgba(251,191,36,0.3)' },
+    red:     { bg: 'rgba(239,68,68,0.12)', fg: C.red, br: 'rgba(239,68,68,0.3)' },
+    blue:    { bg: 'rgba(96,165,250,0.12)', fg: C.blue, br: 'rgba(96,165,250,0.3)' },
+  }[tone];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      background: tones.bg, color: tones.fg,
+      border: `1px solid ${tones.br}`,
+      fontSize: 11, fontWeight: 600,
+      padding: '3px 9px', borderRadius: 999,
+      letterSpacing: '0.01em',
+      ...style,
+    }}>{children}</span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI cards
+// ─────────────────────────────────────────────────────────────────────────────
+function KpiCard({ icon, label, value, sub, accent }) {
+  return (
+    <Card style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 14, minHeight: 132 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10,
+          background: accent ? `${C.greenSoft}` : 'rgba(255,255,255,0.06)',
+          color: accent ? C.green : C.text2,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: `1px solid ${accent ? C.greenBorder : C.border}`,
+        }}>
+          {icon}
+        </div>
+        <div style={{
+          fontFamily: 'Inter', fontSize: 11,
+          color: C.text3, letterSpacing: '0.06em',
+          textTransform: 'uppercase', fontWeight: 600,
+          textAlign: 'right',
+        }}>{label}</div>
+      </div>
+      <div style={{ marginTop: 'auto' }}>
+        <div style={{
+          fontFamily: 'Syne, sans-serif', fontWeight: 800,
+          fontSize: 36, lineHeight: 1,
+          color: accent ? C.green : C.text,
+          letterSpacing: '-0.02em',
+        }}>{value}</div>
+        {sub && (
+          <div style={{
+            fontSize: 12, color: C.text3, marginTop: 6,
+            fontFamily: 'Inter',
+          }}>{sub}</div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function KpiRow({ data }) {
+  const tv = data.target_visibility;
+  const targetCard = (() => {
+    if (!tv) return null;
+    if (!tv.found) {
+      return (
+        <KpiCard
+          icon={<IconTarget size={18} />}
+          label="Tu posición"
+          value={<span style={{ fontSize: 22, fontFamily: 'Syne', fontWeight: 700 }}>No rankeas aún</span>}
+          sub={tv.domain}
+        />
+      );
+    }
+    const tone = tv.in_top_3 ? 'top-3' : tv.in_top_10 ? 'top-10' : 'fuera';
+    return (
+      <KpiCard
+        icon={<IconTarget size={18} />}
+        label="Tu posición"
+        value={`#${tv.position}`}
+        sub={tone === 'top-3' ? 'En el top 3 — excelente' : tone === 'top-10' ? 'En la primera página' : 'Fuera del top 10'}
+        accent={true}
+      />
+    );
+  })();
+
+  return (
+    <div className="kpi-grid" style={{
+      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+      gap: 16, marginBottom: 28,
+    }}>
+      <KpiCard
+        icon={<IconTrendingUp size={18} />}
+        label="Posición promedio"
+        value={data.average_position?.toFixed(1) ?? '—'}
+        sub="entre los resultados orgánicos"
+      />
+      <KpiCard
+        icon={<IconLayers size={18} />}
+        label="Funciones SERP"
+        value={data.serp_features_count}
+        sub={data.serp_features.slice(0, 2).map(f => f.replace(/_/g, ' ')).join(' · ')}
+      />
+      <KpiCard
+        icon={<IconList size={18} />}
+        label="Resultados orgánicos"
+        value={data.organic_results_count}
+        sub={`${fmtNum(data.total_results_google)} en total`}
+      />
+      {targetCard}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ranking distribution — horizontal bar chart (custom SVG, recharts-style)
+// ─────────────────────────────────────────────────────────────────────────────
+function RankingDistribution({ dist, total }) {
+  const rows = [
+    { label: 'Top 3',   value: dist.top_3,   tone: C.green },
+    { label: 'Top 10',  value: dist.top_10,  tone: '#4ade80' },
+    { label: 'Top 20',  value: dist.top_20,  tone: '#86efac' },
+    { label: 'Top 100', value: dist.top_100, tone: 'rgba(255,255,255,0.25)' },
+  ];
+  const max = Math.max(...rows.map(r => r.value), 1);
+
+  return (
+    <Card style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <h3 style={{
+            fontFamily: 'Syne', fontWeight: 700, fontSize: 17,
+            color: C.text, letterSpacing: '-0.01em', marginBottom: 4,
+          }}>Distribución de ranking</h3>
+          <p style={{ fontSize: 12, color: C.text3 }}>
+            Cuántos resultados aparecen en cada rango de posiciones
+          </p>
+        </div>
+        <Badge tone="default">{total} resultados</Badge>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 4 }}>
+        {rows.map((r, i) => {
+          const pct = (r.value / max) * 100;
+          return (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '60px 1fr 32px', gap: 12, alignItems: 'center' }}>
+              <div style={{
+                fontSize: 12, color: C.text2, fontWeight: 500,
+                fontFamily: 'JetBrains Mono, monospace',
+              }}>{r.label}</div>
+              <div style={{
+                background: 'rgba(255,255,255,0.04)',
+                borderRadius: 6, height: 28,
+                overflow: 'hidden', position: 'relative',
+                border: '1px solid rgba(255,255,255,0.05)',
+              }}>
+                <div style={{
+                  width: `${pct}%`, height: '100%',
+                  background: `linear-gradient(90deg, ${r.tone}cc, ${r.tone})`,
+                  borderRadius: 5,
+                  transition: 'width 0.6s cubic-bezier(0.2, 0.9, 0.3, 1)',
+                  boxShadow: r.tone === C.green ? `0 0 24px ${r.tone}40` : 'none',
+                }} />
+              </div>
+              <div style={{
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 16,
+                color: C.text, textAlign: 'right',
+                fontVariantNumeric: 'tabular-nums',
+              }}>{r.value}</div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Top 10 domains list
+// ─────────────────────────────────────────────────────────────────────────────
+function TopDomains({ domains, target, top3 }) {
+  return (
+    <Card style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <h3 style={{
+          fontFamily: 'Syne', fontWeight: 700, fontSize: 17,
+          color: C.text, letterSpacing: '-0.01em', marginBottom: 4,
+        }}>Top 10 dominios</h3>
+        <p style={{ fontSize: 12, color: C.text3 }}>
+          Quiénes ocupan las primeras posiciones para esta keyword
+        </p>
+      </div>
+
+      <ol style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 6, padding: 0, margin: 0 }}>
+        {domains.map((d, i) => {
+          const isTarget = target && d === target.domain;
+          const isTop3 = top3.includes(d);
+          return (
+            <li key={d} style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '8px 12px',
+              borderRadius: 8,
+              background: isTarget ? C.greenSoft : 'transparent',
+              border: `1px solid ${isTarget ? C.greenBorder : 'transparent'}`,
+              transition: 'background 0.15s',
+            }}>
+              <div style={{
+                fontFamily: 'JetBrains Mono, monospace',
+                fontSize: 11, fontWeight: 600,
+                width: 22, textAlign: 'right',
+                color: isTop3 ? C.green : C.text3,
+                fontVariantNumeric: 'tabular-nums',
+              }}>{String(i + 1).padStart(2, '0')}</div>
+              <img src={fav(d)} alt="" width={16} height={16} style={{ borderRadius: 3, flexShrink: 0 }} />
+              <span style={{
+                fontSize: 13, color: isTarget ? C.green : C.text,
+                fontWeight: isTarget ? 600 : 500,
+                fontFamily: 'Inter',
+                flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>{d}</span>
+              {isTarget && <Badge tone="green" style={{ fontSize: 10, padding: '2px 7px' }}>Tú</Badge>}
+              {isTop3 && !isTarget && <Badge tone="default" style={{ fontSize: 10, padding: '2px 7px' }}>Top 3</Badge>}
+            </li>
+          );
+        })}
+      </ol>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Overview card
+// ─────────────────────────────────────────────────────────────────────────────
+function renderMarkdown(md) {
+  // Tiny markdown: **bold** and paragraphs split on \n\n
+  const paragraphs = md.split(/\n\n+/);
+  return paragraphs.map((p, i) => {
+    const parts = p.split(/(\*\*[^*]+\*\*)/g).map((seg, j) => {
+      if (seg.startsWith('**') && seg.endsWith('**')) {
+        return <strong key={j} style={{ color: C.text, fontWeight: 600 }}>{seg.slice(2, -2)}</strong>;
+      }
+      return <React.Fragment key={j}>{seg}</React.Fragment>;
+    });
+    return <p key={i} style={{ marginBottom: i < paragraphs.length - 1 ? 12 : 0 }}>{parts}</p>;
+  });
+}
+
+function AIOverview({ ai }) {
+  if (!ai) return null;
+  return (
+    <Card style={{
+      padding: 28,
+      background: `linear-gradient(180deg, rgba(34,197,94,0.04), ${C.card})`,
+      border: `1px solid ${C.greenBorder}`,
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      {/* subtle glow */}
+      <div style={{
+        position: 'absolute', top: -100, right: -100,
+        width: 300, height: 300,
+        background: `radial-gradient(circle, ${C.greenSoft}, transparent 70%)`,
+        pointerEvents: 'none',
+      }} />
+
+      <div style={{ display: 'flex', gap: 16, marginBottom: 18, alignItems: 'flex-start', position: 'relative' }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 12,
+          background: C.greenSoft, color: C.green,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: `1px solid ${C.greenBorder}`,
+          flexShrink: 0,
+        }}>
+          <IconBrain size={20} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <h3 style={{
+              fontFamily: 'Syne', fontWeight: 700, fontSize: 18,
+              color: C.text, letterSpacing: '-0.01em',
+            }}>AI Overview de Google</h3>
+            <Badge tone="green">Detectado</Badge>
+          </div>
+          <p style={{ fontSize: 12, color: C.text3 }}>
+            Respuesta generada por IA que aparece arriba de los resultados orgánicos
+          </p>
+        </div>
+      </div>
+
+      <div style={{
+        fontSize: 14.5, lineHeight: 1.7, color: C.text2,
+        fontFamily: 'Inter', position: 'relative',
+        paddingLeft: 16, borderLeft: `2px solid ${C.greenBorder}`,
+      }}>
+        {renderMarkdown(ai.markdown)}
+      </div>
+
+      <div style={{ marginTop: 22, position: 'relative' }}>
+        <div style={{
+          fontSize: 11, color: C.text3, fontWeight: 600,
+          letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10,
+        }}>Fuentes citadas · {ai.references_count}</div>
+        <div className="chip-scroll" style={{
+          display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4,
+        }}>
+          {ai.references.map((r, i) => (
+            <a key={i} href={r.url} target="_blank" rel="noreferrer" style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '8px 12px',
+              background: 'rgba(255,255,255,0.04)',
+              border: `1px solid ${C.border}`,
+              borderRadius: 999, textDecoration: 'none',
+              flexShrink: 0, transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = C.borderStrong; e.currentTarget.style.background = C.cardHover; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+            >
+              <img src={fav(r.domain)} alt="" width={14} height={14} style={{ borderRadius: 2 }} />
+              <span style={{ fontSize: 12, color: C.text2, fontWeight: 500, whiteSpace: 'nowrap' }}>{r.source}</span>
+            </a>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Organic results table (tanstack-style with sortable columns)
+// ─────────────────────────────────────────────────────────────────────────────
+function highlightText(text, terms) {
+  if (!terms || terms.length === 0) return text;
+  const escaped = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const re = new RegExp(`(${escaped.join('|')})`, 'gi');
+  const parts = text.split(re);
+  return parts.map((p, i) =>
+    re.test(p) ? <mark key={i}>{p}</mark> : <React.Fragment key={i}>{p}</React.Fragment>
+  );
+}
+
+function ResultsTable({ rows, target }) {
+  const [sort, setSort] = useState({ key: 'rank_absolute', dir: 'asc' });
+  const [expanded, setExpanded] = useState(null);
+
+  const sorted = useMemo(() => {
+    const arr = [...rows];
+    arr.sort((a, b) => {
+      let va = a[sort.key], vb = b[sort.key];
+      if (sort.key === 'sitelinks') { va = a.sitelinks.length; vb = b.sitelinks.length; }
+      if (sort.key === 'domain' || sort.key === 'title') {
+        return sort.dir === 'asc' ? String(va).localeCompare(vb) : String(vb).localeCompare(va);
+      }
+      return sort.dir === 'asc' ? va - vb : vb - va;
+    });
+    return arr;
+  }, [rows, sort]);
+
+  const toggleSort = (key) => {
+    setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' });
+  };
+
+  const SortHead = ({ k, children, w, align }) => (
+    <th style={{
+      textAlign: align || 'left', width: w,
+      padding: '14px 16px', fontSize: 11,
+      fontWeight: 600, color: C.text3,
+      letterSpacing: '0.06em', textTransform: 'uppercase',
+      borderBottom: `1px solid ${C.border}`,
+      cursor: 'pointer', userSelect: 'none',
+      whiteSpace: 'nowrap',
+    }} onClick={() => toggleSort(k)}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+        {children}
+        {sort.key === k && (sort.dir === 'asc' ? <IconArrowUp size={11}/> : <IconArrowDown size={11}/>)}
+      </span>
+    </th>
+  );
+
+  return (
+    <Card style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h3 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 17, color: C.text, letterSpacing: '-0.01em' }}>
+            Resultados orgánicos
+          </h3>
+          <p style={{ fontSize: 12, color: C.text3, marginTop: 4 }}>
+            {rows.length} resultados — clic en una fila para ver detalles
+          </p>
+        </div>
+        {target?.found && (
+          <Badge tone="green">Tu sitio aparece en posición #{target.position}</Badge>
+        )}
+      </div>
+
+      <div style={{ overflowX: 'auto' }}>
+        <table className="results-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <SortHead k="rank_absolute" w={70} align="center">#</SortHead>
+              <SortHead k="domain" w={200}>Dominio</SortHead>
+              <SortHead k="title">Título y descripción</SortHead>
+              <SortHead k="sitelinks" w={90} align="center">Sitelinks</SortHead>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((r, idx) => {
+              const isTarget = target && r.domain === target.domain;
+              const isExp = expanded === r.rank_absolute;
+              return (
+                <React.Fragment key={r.rank_absolute}>
+                  <tr style={{
+                    background: isTarget ? 'rgba(34,197,94,0.05)' : 'transparent',
+                    borderLeft: isTarget ? `2px solid ${C.green}` : '2px solid transparent',
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                  }}
+                  onClick={() => setExpanded(isExp ? null : r.rank_absolute)}
+                  onMouseEnter={e => { if (!isTarget) e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+                  onMouseLeave={e => { if (!isTarget) e.currentTarget.style.background = 'transparent'; }}>
+
+                    {/* Rank */}
+                    <td style={{ padding: '16px', borderBottom: `1px solid ${C.border}`, textAlign: 'center', verticalAlign: 'top' }}>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 32, height: 28, padding: '0 8px',
+                          borderRadius: 8,
+                          background: r.rank_absolute <= 3 ? C.greenSoft : 'rgba(255,255,255,0.06)',
+                          border: `1px solid ${r.rank_absolute <= 3 ? C.greenBorder : C.border}`,
+                          fontFamily: 'Syne', fontWeight: 700, fontSize: 13,
+                          color: r.rank_absolute <= 3 ? C.green : C.text2,
+                        }}>{r.rank_absolute}</div>
+                        {r.is_featured_snippet && (
+                          <span title="Featured snippet" style={{ color: C.yellow, display: 'inline-flex' }}>
+                            <IconStar size={14} fill={C.yellow} stroke={C.yellow} sw={1} />
+                          </span>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* Domain */}
+                    <td style={{ padding: '16px', borderBottom: `1px solid ${C.border}`, verticalAlign: 'top' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <img src={fav(r.domain)} alt="" width={20} height={20} style={{ borderRadius: 4, flexShrink: 0 }} />
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{
+                            fontSize: 13, fontWeight: 600, color: isTarget ? C.green : C.text,
+                            fontFamily: 'Inter',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          }}>{r.domain}</div>
+                          {isTarget && (
+                            <div style={{ fontSize: 10, color: C.green, fontWeight: 600, letterSpacing: '0.04em', textTransform: 'uppercase', marginTop: 2 }}>
+                              Tu sitio
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Title + description */}
+                    <td style={{ padding: '16px', borderBottom: `1px solid ${C.border}`, verticalAlign: 'top' }}>
+                      <a href={r.url} target="_blank" rel="noreferrer"
+                         onClick={e => e.stopPropagation()}
+                         style={{
+                          display: 'block', fontSize: 14, fontWeight: 500,
+                          color: isTarget ? C.green : '#a3c3ff',
+                          textDecoration: 'none', marginBottom: 4,
+                          fontFamily: 'Inter',
+                          overflow: 'hidden', textOverflow: 'ellipsis',
+                          display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical',
+                         }}
+                         onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                         onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>
+                        {r.title}
+                      </a>
+                      <div style={{
+                        fontSize: 11, color: C.text3, marginBottom: 6,
+                        fontFamily: 'JetBrains Mono, monospace',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{r.breadcrumb}</div>
+                      <div style={{
+                        fontSize: 13, lineHeight: 1.5, color: C.text2,
+                        display: '-webkit-box', WebkitLineClamp: isExp ? 99 : 2, WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                      }}>
+                        {highlightText(r.description, r.highlighted)}
+                      </div>
+                    </td>
+
+                    {/* Sitelinks count */}
+                    <td style={{ padding: '16px', borderBottom: `1px solid ${C.border}`, textAlign: 'center', verticalAlign: 'top' }}>
+                      {r.sitelinks.length > 0 ? (
+                        <Badge tone="blue">{r.sitelinks.length}</Badge>
+                      ) : (
+                        <span style={{ color: C.text4, fontSize: 12 }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+
+                  {/* Expanded sitelinks row */}
+                  {isExp && r.sitelinks.length > 0 && (
+                    <tr style={{ background: 'rgba(255,255,255,0.015)' }}>
+                      <td colSpan={4} style={{ padding: '16px 24px 20px 64px', borderBottom: `1px solid ${C.border}` }}>
+                        <div style={{ fontSize: 11, color: C.text3, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10 }}>
+                          Sitelinks
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
+                          {r.sitelinks.map((sl, j) => (
+                            <a key={j} href={sl.url} style={{
+                              padding: '10px 12px', borderRadius: 8,
+                              background: 'rgba(255,255,255,0.03)',
+                              border: `1px solid ${C.border}`,
+                              textDecoration: 'none', display: 'block',
+                            }}>
+                              <div style={{ fontSize: 13, color: '#a3c3ff', fontWeight: 500, marginBottom: 2 }}>
+                                {sl.title}
+                              </div>
+                              {sl.description && (
+                                <div style={{ fontSize: 11, color: C.text3 }}>{sl.description}</div>
+                              )}
+                            </a>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Related searches sidebar
+// ─────────────────────────────────────────────────────────────────────────────
+function RelatedSearches({ items, onSearchAgain }) {
+  return (
+    <Card style={{ padding: 22, display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div>
+        <h3 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: C.text, letterSpacing: '-0.01em' }}>
+          Búsquedas relacionadas
+        </h3>
+        <p style={{ fontSize: 12, color: C.text3, marginTop: 3 }}>
+          Clic para analizar otra keyword
+        </p>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {items.map((q, i) => (
+          <button key={i} onClick={() => onSearchAgain(q)} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 12px', borderRadius: 8,
+            background: 'rgba(255,255,255,0.025)',
+            border: `1px solid ${C.border}`,
+            color: C.text2, fontSize: 13, fontWeight: 500,
+            fontFamily: 'Inter', cursor: 'pointer',
+            textAlign: 'left', transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = C.greenSoft;
+            e.currentTarget.style.borderColor = C.greenBorder;
+            e.currentTarget.style.color = C.green;
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.025)';
+            e.currentTarget.style.borderColor = C.border;
+            e.currentTarget.style.color = C.text2;
+          }}>
+            <IconSearch size={13} />
+            <span style={{ flex: 1 }}>{q}</span>
+            <IconChevronRt size={13} />
+          </button>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Footer ops stats
+// ─────────────────────────────────────────────────────────────────────────────
+function OpsFooter({ data }) {
+  return (
+    <Card style={{ padding: '16px 22px', marginTop: 28 }}>
+      <div className="footer-stats" style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        gap: 24, flexWrap: 'wrap',
+      }}>
+        <div style={{ display: 'flex', gap: 28, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.text3, fontSize: 12 }}>
+            <IconDollar size={14} />
+            <span style={{ color: C.text2, fontFamily: 'JetBrains Mono, monospace' }}>
+              ${data.cost.toFixed(4)} USD
+            </span>
+            <span>· costo del análisis</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.text3, fontSize: 12 }}>
+            <IconClock size={14} />
+            <span style={{ color: C.text2, fontFamily: 'JetBrains Mono, monospace' }}>{data.task_time}</span>
+            <span>· tiempo de respuesta</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.text3, fontSize: 12 }}>
+            <IconCalendar size={14} />
+            <span style={{ color: C.text2 }}>{fmtDate(data.datetime)}</span>
+          </div>
+        </div>
+        <a href={data.check_url} target="_blank" rel="noreferrer" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          background: C.green, color: C.bg,
+          fontWeight: 700, fontSize: 13, padding: '10px 18px',
+          borderRadius: 9, textDecoration: 'none',
+          fontFamily: 'Inter', transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 20px ${C.green}40`; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
+          Ver SERP en Google <IconExternal size={13} />
+        </a>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main dashboard component
+// ─────────────────────────────────────────────────────────────────────────────
+function SerpAnalysisDashboard({ data, onSearchAgain }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+      {/* Header */}
+      <header style={{ marginBottom: 28 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <div style={{
+            fontFamily: 'Caveat, cursive', color: C.green, fontSize: 18,
+          }}>Análisis SERP</div>
+          <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.text4 }}></div>
+          <div style={{ fontSize: 12, color: C.text3, fontFamily: 'Inter' }}>
+            Cómo ranquea Google para tu keyword
+          </div>
+        </div>
+        <h1 style={{
+          fontFamily: 'Syne, sans-serif', fontWeight: 800,
+          fontSize: 'clamp(28px, 4vw, 44px)', lineHeight: 1.1,
+          color: C.text, letterSpacing: '-0.025em',
+          marginBottom: 14,
+        }}>
+          <span style={{ color: C.text3 }}>"</span>{data.keyword}<span style={{ color: C.text3 }}>"</span>
+        </h1>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {data.has_ai_overview && <Badge tone="green"><IconBrain size={11}/> AI Overview</Badge>}
+          {data.featured_snippet_domain && (
+            <Badge tone="yellow"><IconStar size={11} fill={C.yellow} stroke={C.yellow} sw={1}/> Featured snippet</Badge>
+          )}
+          {data.serp_features.includes('local_pack') && <Badge tone="blue">Pack local</Badge>}
+          {data.serp_features.includes('people_also_ask') && <Badge tone="default">People also ask</Badge>}
+        </div>
+      </header>
+
+      {/* KPIs */}
+      <KpiRow data={data} />
+
+      {/* Ranking + Top domains */}
+      <div className="ranking-grid" style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr',
+        gap: 16, marginBottom: 28,
+      }}>
+        <RankingDistribution dist={data.ranking_distribution} total={data.organic_results_count} />
+        <TopDomains domains={data.top_10_domains} target={data.target_visibility} top3={data.top_3_domains} />
+      </div>
+
+      {/* AI Overview */}
+      {data.has_ai_overview && data.ai_overview && (
+        <div style={{ marginBottom: 28 }}>
+          <AIOverview ai={data.ai_overview} />
+        </div>
+      )}
+
+      {/* Main: results table + sidebar */}
+      <div className="main-grid" style={{
+        display: 'grid', gridTemplateColumns: '1fr 320px',
+        gap: 16, alignItems: 'flex-start',
+      }}>
+        <ResultsTable rows={data.organic_results} target={data.target_visibility} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, position: 'sticky', top: 16 }}>
+          <RelatedSearches items={data.related_searches} onSearchAgain={onSearchAgain} />
+        </div>
+      </div>
+
+      {/* Footer ops */}
+      <OpsFooter data={data} />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// App shell — preview wrapper
+// ─────────────────────────────────────────────────────────────────────────────
+function App() {
+  const [keyword, setKeyword] = useState(sampleData.keyword);
+  const handleSearchAgain = (q) => {
+    setKeyword(q);
+    alert(`onSearchAgain("${q}") — re-ejecutando análisis…`);
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh', padding: '40px 32px 60px',
+      background: '#0a0a0a',
+    }}>
+      {/* Background dot grid */}
+      <div style={{
+        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
+        backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)`,
+        backgroundSize: '32px 32px',
+        maskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 90%)',
+        WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 90%)',
+      }}></div>
+
+      <div style={{ maxWidth: 1280, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+        {/* Top app bar mock */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 32, paddingBottom: 18,
+          borderBottom: `1px solid ${C.border}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 8, background: C.green,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Syne', fontWeight: 800, color: C.bg, fontSize: 14,
+            }}>E</div>
+            <div style={{
+              fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: C.text,
+            }}>EDA</div>
+            <div style={{
+              fontSize: 12, color: C.text3,
+              padding: '2px 8px', borderRadius: 999,
+              border: `1px solid ${C.border}`, marginLeft: 8,
+            }}>Dashboard</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 12, color: C.text3 }}>pizzeriadonmario.co</span>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.08)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: C.text2, fontSize: 12, fontWeight: 600,
+            }}>DM</div>
+          </div>
+        </div>
+
+        <SerpAnalysisDashboard data={sampleData} onSearchAgain={handleSearchAgain} />
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

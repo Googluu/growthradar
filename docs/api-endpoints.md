@@ -197,23 +197,64 @@ Consulta el estado y resultado de un dashboard job. El frontend hace polling cad
     "sections": {
       "serp": {
         "keyword": "dian",
-        "average_position": 4.6,
-        "serp_features_count": 3,
-        "serp_features": ["featured_snippet", "knowledge_graph", "site_links"],
+        "datetime": "2026-05-07T14:23:11Z",
+        "check_url": "https://www.google.com/search?q=dian",
+        "se_domain": "google.com.co",
+        "location_code": 2170,
+        "language_code": "es",
+        "total_results_google": 4820000,
+        "items_count": 22,
         "organic_results_count": 5,
+        "average_position": 4.6,
+        "serp_features": ["featured_snippet", "knowledge_graph", "site_links"],
+        "serp_features_count": 3,
         "has_ai_overview": false,
+        "ai_overview": null,
+        "ranking_distribution": {
+          "top_3": 2,
+          "top_10": 5,
+          "top_20": 5,
+          "top_100": 5
+        },
+        "top_3_domains": ["dian.gov.co", "gerencie.com", "actualicese.com"],
+        "top_10_domains": ["dian.gov.co", "gerencie.com", "actualicese.com", "legis.pe", "gov.co"],
+        "featured_snippet_domain": null,
         "target_visibility": {
           "domain": "dian.gov.co",
           "found": true,
           "position": 1,
+          "url": "https://www.dian.gov.co",
           "in_top_3": true,
           "in_top_10": true,
           "is_featured_snippet": false
         },
-        "organic_results": [{ "rank_absolute": 1, "title": "...", "url": "...", "domain": "...", "description": "...", "..." : "..." }],
-        "related_searches": ["consulta rut dian", "..."],
+        "organic_results": [
+          {
+            "rank_absolute": 1,
+            "rank_group": 1,
+            "position": "left",
+            "title": "DIAN - Dirección de Impuestos y Aduanas Nacionales",
+            "url": "https://www.dian.gov.co",
+            "domain": "dian.gov.co",
+            "description": "Servicio tributario del Estado colombiano...",
+            "breadcrumb": "dian.gov.co",
+            "website_name": "DIAN",
+            "is_featured_snippet": false,
+            "is_image": false,
+            "is_video": false,
+            "highlighted": ["DIAN", "impuestos"],
+            "sitelinks": [
+              { "title": "Consulta RUT", "url": "https://muisca.dian.gov.co", "description": "Consulta y actualización del RUT" },
+              { "title": "Declaraciones", "url": "https://www.dian.gov.co/declaraciones", "description": "" }
+            ]
+          }
+        ],
+        "related_searches": ["consulta rut dian", "dian factura electronica", "dian muisca"],
+        "perspectives": [],
+        "perspectives_count": 0,
         "cost": 0.002,
-        "task_time": "2.14s"
+        "task_time": "2.14s",
+        "task_status_code": 20000
       },
       "labs": {
         "seed_keyword": "dian",
