@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import type {
   SerpData,
   SerpOrganic,
@@ -624,8 +624,8 @@ function ResultsTable({ rows, target }: {
               const isTarget = target?.found && r.domain === target.domain;
               const isExp = expanded === r.rank_absolute;
               return (
-                <>
-                  <tr key={r.rank_absolute} style={{
+                <React.Fragment key={r.rank_absolute}>
+                  <tr style={{
                     background: isTarget ? "rgba(93,184,72,0.05)" : "transparent",
                     borderLeft: isTarget ? `2px solid ${G}` : "2px solid transparent",
                     cursor: "pointer", transition: "background 0.15s",
@@ -725,7 +725,7 @@ function ResultsTable({ rows, target }: {
 
                   {/* Expanded sitelinks */}
                   {isExp && r.sitelinks.length > 0 && (
-                    <tr key={`${r.rank_absolute}-exp`} style={{ background: "rgba(255,255,255,0.015)" }}>
+                    <tr style={{ background: "rgba(255,255,255,0.015)" }}>
                       <td colSpan={4} style={{ padding: "16px 24px 20px 64px", borderBottom: `1px solid ${C.border}` }}>
                         <div style={{
                           fontSize: 11, color: C.text3, fontWeight: 600,
@@ -756,7 +756,7 @@ function ResultsTable({ rows, target }: {
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               );
             })}
           </tbody>
