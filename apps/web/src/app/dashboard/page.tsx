@@ -63,6 +63,28 @@ async function pollAudit(job_id: string): Promise<DashboardAuditResult> {
   throw new Error("audit_timeout");
 }
 
+// ── Free-report persistence ───────────────────────────────────────────────────
+const FREE_REPORT_KEY = "eda_free_report_v1";
+
+interface FreeReport {
+  serpData: SerpData;
+  formData: AuditFormData;
+  ts: number;
+}
+
+function readFreeReport(): FreeReport | null {
+  try {
+    const raw = localStorage.getItem(FREE_REPORT_KEY);
+    return raw ? (JSON.parse(raw) as FreeReport) : null;
+  } catch { return null; }
+}
+
+function saveFreeReport(serpData: SerpData, formData: AuditFormData) {
+  try {
+    localStorage.setItem(FREE_REPORT_KEY, JSON.stringify({ serpData, formData, ts: Date.now() }));
+  } catch { /* storage full */ }
+}
+
 // ── Color tokens ──────────────────────────────────────────────────────────────
 const G  = "#5DB848";
 const Gs = "rgba(93,184,72,0.12)";
@@ -453,7 +475,12 @@ function ScanningCard({ domain, businessName }: { domain: string; businessName: 
     "Detectando funciones SERP…",
     "Calculando posiciones y competidores…",
   ];
-  const [step] = useState(0);
+  const [step, setStep] = useState(0);
+
+  useEffect(() => {
+    const t = setInterval(() => setStep(s => s < steps.length - 1 ? s + 1 : s), 8_000);
+    return () => clearInterval(t);
+  }, [steps.length]);
 
   return (
     <div style={{
@@ -533,10 +560,11 @@ function ScanningCard({ domain, businessName }: { domain: string; businessName: 
 }
 
 // ── Top bar ───────────────────────────────────────────────────────────────────
-function TopBar({ domain, businessName, onReset }: {
+function TopBar({ domain, businessName, onReset, freeReportUsed }: {
   domain: string;
   businessName: string;
   onReset: () => void;
+  freeReportUsed: boolean;
 }) {
   return (
     <div style={{
@@ -570,28 +598,51 @@ function TopBar({ domain, businessName, onReset }: {
         </div>
       </div>
 
-      <button
-        onClick={onReset}
-        style={{
-          padding: "7px 14px", borderRadius: 8,
-          background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-          color: "rgba(255,255,255,0.6)",
-          fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 500,
-          cursor: "pointer", transition: "all 0.15s", flexShrink: 0,
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.background = Gs;
-          e.currentTarget.style.borderColor = Gb;
-          e.currentTarget.style.color = G;
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-          e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-          e.currentTarget.style.color = "rgba(255,255,255,0.6)";
-        }}
-      >
-        + Nueva búsqueda
-      </button>
+      {freeReportUsed ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+          <span style={{
+            fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
+            color: "rgba(255,255,255,0.3)",
+          }}>
+            Crea una cuenta para más reportes
+          </span>
+          <button
+            disabled
+            style={{
+              padding: "7px 14px", borderRadius: 8,
+              background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
+              color: "rgba(255,255,255,0.2)",
+              fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 500,
+              cursor: "not-allowed", flexShrink: 0,
+            }}
+          >
+            + Nueva búsqueda
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={onReset}
+          style={{
+            padding: "7px 14px", borderRadius: 8,
+            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
+            color: "rgba(255,255,255,0.6)",
+            fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 500,
+            cursor: "pointer", transition: "all 0.15s", flexShrink: 0,
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = Gs;
+            e.currentTarget.style.borderColor = Gb;
+            e.currentTarget.style.color = G;
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+            e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
+            e.currentTarget.style.color = "rgba(255,255,255,0.6)";
+          }}
+        >
+          + Nueva búsqueda
+        </button>
+      )}
     </div>
   );
 }
@@ -634,10 +685,22 @@ function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void 
 type Phase = "input" | "scanning" | "result" | "error";
 
 export default function DashboardPage() {
-  const [phase,    setPhase]    = useState<Phase>("input");
-  const [lastForm, setLastForm] = useState<AuditFormData | null>(null);
-  const [serpData, setSerpData] = useState<SerpData | null>(null);
-  const [errMsg,   setErrMsg]   = useState("");
+  const [phase,           setPhase]           = useState<Phase>("input");
+  const [lastForm,        setLastForm]        = useState<AuditFormData | null>(null);
+  const [serpData,        setSerpData]        = useState<SerpData | null>(null);
+  const [errMsg,          setErrMsg]          = useState("");
+  const [freeReportUsed,  setFreeReportUsed]  = useState(false);
+
+  // Restore cached free report on mount
+  useEffect(() => {
+    const stored = readFreeReport();
+    if (stored) {
+      setLastForm(stored.formData);
+      setSerpData(stored.serpData);
+      setFreeReportUsed(true);
+      setPhase("result");
+    }
+  }, []);
 
   const runAudit = useCallback(async (data: AuditFormData) => {
     setLastForm(data);
@@ -663,6 +726,8 @@ export default function DashboardPage() {
         throw new Error((serp as { error: string })?.error ?? "Sin datos SERP");
       }
 
+      saveFreeReport(serp, data);
+      setFreeReportUsed(true);
       setSerpData(serp);
       setPhase("result");
     } catch (err) {
@@ -676,6 +741,7 @@ export default function DashboardPage() {
   }, [lastForm, runAudit]);
 
   const handleReset = () => {
+    if (freeReportUsed) return;
     setPhase("input");
     setSerpData(null);
     setLastForm(null);
@@ -723,7 +789,7 @@ export default function DashboardPage() {
 
         {phase === "result" && serpData && lastForm && (
           <>
-            <TopBar domain={lastForm.domain} businessName={lastForm.businessName} onReset={handleReset} />
+            <TopBar domain={lastForm.domain} businessName={lastForm.businessName} onReset={handleReset} freeReportUsed={freeReportUsed} />
             <div style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 32px 60px" }}>
               <SerpSection data={serpData} onSearchAgain={handleSearchAgain} />
             </div>
