@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
 import { SerpSection } from "@/components/dashboard/SerpSection";
 import type { SerpData, DashboardAuditResult } from "@/types/dashboard";
@@ -186,11 +186,14 @@ function ChipInput({ chips, onChange }: {
 }
 
 // ── Audit form ────────────────────────────────────────────────────────────────
-function AuditForm({ onSubmit, initialDomain = "" }: {
-  onSubmit: (data: AuditFormData) => void;
-  initialDomain?: string;
-}) {
-  const [domain,      setDomain]      = useState(initialDomain);
+function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
+  const [domain,      setDomain]      = useState("");
+
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get("url") ?? "";
+    const d = raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0];
+    if (d) setDomain(d);
+  }, []);
   const [businessName, setBusinessName] = useState("");
   const [keywords,    setKeywords]    = useState<string[]>([]);
   const [countryCode, setCountryCode] = useState(2170);
@@ -636,12 +639,6 @@ export default function DashboardPage() {
   const [serpData, setSerpData] = useState<SerpData | null>(null);
   const [errMsg,   setErrMsg]   = useState("");
 
-  const [initialDomain] = useState(() => {
-    if (typeof window === "undefined") return "";
-    const raw = new URLSearchParams(window.location.search).get("url") ?? "";
-    return raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0];
-  });
-
   const runAudit = useCallback(async (data: AuditFormData) => {
     setLastForm(data);
     setPhase("scanning");
@@ -716,7 +713,7 @@ export default function DashboardPage() {
                 Dashboard
               </span>
             </div>
-            <AuditForm onSubmit={runAudit} initialDomain={initialDomain} />
+            <AuditForm onSubmit={runAudit} />
           </>
         )}
 
