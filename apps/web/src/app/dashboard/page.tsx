@@ -1,15 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { SerpSection } from "@/components/dashboard/SerpSection";
-import type { SerpData, DashboardAuditResult } from "@/types/dashboard";
+import { readFreeReport, saveFreeReport, triggerAudit, pollAudit, API_BASE } from "@/lib/audit";
+import type { AuditFormData, DashboardAuditResult } from "@/types/dashboard";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
-const API_BASE      = "http://localhost:8000";
-const POLL_INTERVAL = 4_000;
-const POLL_TIMEOUT  = 120_000;
-const MAX_CHIPS     = 5;
+const MAX_CHIPS = 5;
 
 const COUNTRIES = [
   { label: "Colombia 🇨🇴",   code: 2170 },
@@ -24,68 +22,7 @@ const COUNTRIES = [
   { label: "EE.UU. 🇺🇸",     code: 2840 },
 ] as const;
 
-// ── Form data ─────────────────────────────────────────────────────────────────
-interface AuditFormData {
-  domain: string;
-  businessName: string;
-  keywords: string[];
-  countryCode: number;
-  googleBusiness: string;
-}
-
-// ── API ───────────────────────────────────────────────────────────────────────
-async function triggerAudit(
-  domain: string,
-  keyword?: string,
-): Promise<{ job_id: string; status: string; cached: boolean }> {
-  const res = await fetch(`${API_BASE}/public/dashboard-audit`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ domain, keyword: keyword || undefined }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as { detail?: string };
-    throw new Error(err.detail ?? `Error ${res.status}`);
-  }
-  return res.json();
-}
-
-async function pollAudit(job_id: string): Promise<DashboardAuditResult> {
-  const deadline = Date.now() + POLL_TIMEOUT;
-  while (Date.now() < deadline) {
-    await new Promise(r => setTimeout(r, POLL_INTERVAL));
-    const res = await fetch(`${API_BASE}/public/dashboard-audit/${job_id}`);
-    if (!res.ok) continue;
-    const job = await res.json() as { status: string; result?: DashboardAuditResult; error?: string };
-    if (job.status === "completed" && job.result) return job.result;
-    if (job.status === "failed") throw new Error(job.error ?? "audit_failed");
-  }
-  throw new Error("audit_timeout");
-}
-
-// ── Free-report persistence ───────────────────────────────────────────────────
-const FREE_REPORT_KEY = "eda_free_report_v1";
-
-interface FreeReport {
-  serpData: SerpData;
-  formData: AuditFormData;
-  ts: number;
-}
-
-function readFreeReport(): FreeReport | null {
-  try {
-    const raw = localStorage.getItem(FREE_REPORT_KEY);
-    return raw ? (JSON.parse(raw) as FreeReport) : null;
-  } catch { return null; }
-}
-
-function saveFreeReport(serpData: SerpData, formData: AuditFormData) {
-  try {
-    localStorage.setItem(FREE_REPORT_KEY, JSON.stringify({ serpData, formData, ts: Date.now() }));
-  } catch { /* storage full */ }
-}
-
-// ── Color tokens ──────────────────────────────────────────────────────────────
+// ── Tokens ────────────────────────────────────────────────────────────────────
 const G  = "#5DB848";
 const Gs = "rgba(93,184,72,0.12)";
 const Gb = "rgba(93,184,72,0.35)";
@@ -96,7 +33,7 @@ function isDomainValid(raw: string): boolean {
   return d.length > 3 && d.includes(".") && !d.includes(" ");
 }
 
-// ── Shared input style ────────────────────────────────────────────────────────
+// ── Input style ───────────────────────────────────────────────────────────────
 const inputStyle = (active: boolean): React.CSSProperties => ({
   width: "100%", padding: "14px 18px",
   background: "rgba(255,255,255,0.04)",
@@ -106,40 +43,22 @@ const inputStyle = (active: boolean): React.CSSProperties => ({
   outline: "none", transition: "border-color 0.2s",
 });
 
-// ── Chip keyword input ────────────────────────────────────────────────────────
-function ChipInput({ chips, onChange }: {
-  chips: string[];
-  onChange: (chips: string[]) => void;
-}) {
-  const [val, setVal] = useState("");
-  const inputRef      = useRef<HTMLInputElement>(null);
+// ── ChipInput ─────────────────────────────────────────────────────────────────
+function ChipInput({ chips, onChange }: { chips: string[]; onChange: (c: string[]) => void }) {
+  const [val, setVal]       = useState("");
   const [focused, setFocused] = useState(false);
+  const inputRef            = useRef<HTMLInputElement>(null);
 
   const addChip = (raw: string) => {
-    const trimmed = raw.trim().replace(/,$/, "").trim();
-    if (!trimmed || chips.includes(trimmed) || chips.length >= MAX_CHIPS) {
-      setVal("");
-      return;
-    }
-    onChange([...chips, trimmed]);
-    setVal("");
-  };
-
-  const removeChip = (i: number) => {
-    onChange(chips.filter((_, idx) => idx !== i));
-    inputRef.current?.focus();
+    const t = raw.trim().replace(/,$/, "").trim();
+    if (!t || chips.includes(t) || chips.length >= MAX_CHIPS) { setVal(""); return; }
+    onChange([...chips, t]); setVal("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" || e.key === ",") {
-      e.preventDefault();
-      addChip(val);
-    } else if (e.key === "Backspace" && !val && chips.length > 0) {
-      onChange(chips.slice(0, -1));
-    }
+    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addChip(val); }
+    else if (e.key === "Backspace" && !val && chips.length > 0) onChange(chips.slice(0, -1));
   };
-
-  const hasContent = chips.length > 0 || val.length > 0;
 
   return (
     <div
@@ -148,144 +67,106 @@ function ChipInput({ chips, onChange }: {
         display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center",
         padding: "10px 14px", minHeight: 52,
         background: "rgba(255,255,255,0.04)",
-        border: `1px solid ${focused || hasContent ? Gb : "rgba(255,255,255,0.1)"}`,
+        border: `1px solid ${focused || chips.length > 0 ? Gb : "rgba(255,255,255,0.1)"}`,
         borderRadius: 12, cursor: "text", transition: "border-color 0.2s",
       }}
     >
-      {/* Chips */}
       {chips.map((chip, i) => (
         <span key={i} style={{
           display: "inline-flex", alignItems: "center", gap: 6,
           background: Gs, border: `1px solid ${Gb}`,
           borderRadius: 999, padding: "3px 10px",
           fontFamily: "var(--font-inter), sans-serif", fontSize: 13,
-          color: G, fontWeight: 500, whiteSpace: "nowrap",
+          color: G, fontWeight: 500,
         }}>
           {chip}
           <button
             type="button"
-            onClick={e => { e.stopPropagation(); removeChip(i); }}
-            style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: G, fontSize: 16, lineHeight: 1, padding: 0,
-              display: "flex", alignItems: "center",
-            }}
-          >
-            ×
-          </button>
+            onClick={e => { e.stopPropagation(); onChange(chips.filter((_, idx) => idx !== i)); inputRef.current?.focus(); }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: G, fontSize: 16, lineHeight: 1, padding: 0 }}
+          >×</button>
         </span>
       ))}
-
-      {/* Text input */}
       {chips.length < MAX_CHIPS && (
         <input
           ref={inputRef}
-          id="keywords"
-          name="keywords"
-          type="text"
-          value={val}
+          id="keywords" name="keywords"
+          type="text" value={val}
           onChange={e => setVal(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={() => { setFocused(false); if (val.trim()) addChip(val); }}
           onFocus={() => setFocused(true)}
-          placeholder={chips.length === 0
-            ? "pizza a domicilio bogotá, restaurante italiano chapinero"
-            : chips.length < MAX_CHIPS ? "Añadir frase…" : ""}
-          style={{
-            background: "transparent", border: "none", outline: "none",
-            flex: 1, minWidth: 200,
-            color: "#fff", fontFamily: "var(--font-inter), sans-serif", fontSize: 15,
-          }}
+          placeholder={chips.length === 0 ? "pizza a domicilio bogotá, restaurante italiano..." : "Añadir frase…"}
+          style={{ background: "transparent", border: "none", outline: "none", flex: 1, minWidth: 200, color: "#fff", fontFamily: "var(--font-inter), sans-serif", fontSize: 15 }}
         />
       )}
       {chips.length >= MAX_CHIPS && (
-        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter), sans-serif" }}>
-          Máximo {MAX_CHIPS} frases
-        </span>
+        <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter), sans-serif" }}>Máximo {MAX_CHIPS}</span>
       )}
     </div>
   );
 }
 
-// ── Audit form ────────────────────────────────────────────────────────────────
-function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
-  const [domain,      setDomain]      = useState("");
+// ── AuditForm ─────────────────────────────────────────────────────────────────
+function AuditForm({ onSubmit }: { onSubmit: (d: AuditFormData) => void }) {
+  const [domain,       setDomain]       = useState("");
+  const [businessName, setBusinessName] = useState("");
+  const [keywords,     setKeywords]     = useState<string[]>([]);
+  const [countryCode,  setCountryCode]  = useState(2170);
+  const [googleBiz,    setGoogleBiz]    = useState("");
+  const [expanded,     setExpanded]     = useState(false);
 
   useEffect(() => {
     const raw = new URLSearchParams(window.location.search).get("url") ?? "";
     const d = raw.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0];
     if (d) setDomain(d);
   }, []);
-  const [businessName, setBusinessName] = useState("");
-  const [keywords,    setKeywords]    = useState<string[]>([]);
-  const [countryCode, setCountryCode] = useState(2170);
-  const [googleBiz,   setGoogleBiz]   = useState("");
-  const [expanded,    setExpanded]    = useState(false);
 
-  const domainOk   = isDomainValid(domain);
-  const bizOk      = businessName.trim().length > 0;
-  const canSubmit  = domainOk && bizOk;
+  const domainOk  = isDomainValid(domain);
+  const bizOk     = businessName.trim().length > 0;
+  const canSubmit = domainOk && bizOk;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    onSubmit({
-      domain: domain.trim(),
-      businessName: businessName.trim(),
-      keywords,
-      countryCode,
-      googleBusiness: googleBiz.trim(),
-    });
+    onSubmit({ domain: domain.trim(), businessName: businessName.trim(), keywords, countryCode, googleBusiness: googleBiz.trim() });
   };
 
   return (
-    <div style={{ maxWidth: 560, margin: "0 auto", padding: "56px 24px 48px", textAlign: "center" }}>
-
-      {/* Kicker */}
+    <div style={{ maxWidth: 560, margin: "0 auto", padding: "48px 24px 40px", textAlign: "center" }}>
       <div style={{ fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 20, marginBottom: 12 }}>
         Auditoría digital
       </div>
-
-      {/* Headline */}
       <h1 style={{
         fontFamily: "var(--font-syne), sans-serif", fontWeight: 800,
-        fontSize: "clamp(28px, 4vw, 46px)", color: "#fff",
-        letterSpacing: "-0.03em", lineHeight: 1.05, marginBottom: 16,
+        fontSize: "clamp(28px, 4vw, 44px)", color: "#fff",
+        letterSpacing: "-0.03em", lineHeight: 1.05, marginBottom: 14,
       }}>
         ¿Cómo te ve Google?
       </h1>
-
-      {/* Subhead */}
       <p style={{
-        fontFamily: "var(--font-inter), sans-serif", fontSize: 16,
-        color: "rgba(255,255,255,0.45)", marginBottom: 40, lineHeight: 1.65,
+        fontFamily: "var(--font-inter), sans-serif", fontSize: 15,
+        color: "rgba(255,255,255,0.45)", marginBottom: 36, lineHeight: 1.65,
       }}>
-        En 90 segundos analizamos tu presencia en Google: SEO, velocidad,
-        perfil de negocio y posicionamiento. Recibes un reporte con prioridades claras.
+        En 90 segundos analizamos tu presencia en Google: posicionamiento,
+        velocidad, perfil de negocio y más.
       </p>
 
       <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12, textAlign: "left" }}>
-
         {/* Dominio */}
         <div style={{ position: "relative" }}>
           <input
-            id="domain"
-            name="domain"
-            type="text"
-            value={domain}
-            onChange={e => setDomain(e.target.value)}
-            placeholder="tudominio.com"
-            autoComplete="url"
-            style={inputStyle(isDomainValid(domain))}
-            onFocus={e => { e.target.style.borderColor = Gb; }}
-            onBlur={e => { if (!isDomainValid(domain)) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
+            id="domain" name="domain" type="text"
+            value={domain} onChange={e => setDomain(e.target.value)}
+            placeholder="tudominio.com" autoComplete="url"
+            style={inputStyle(domainOk)}
+            onFocus={e  => { e.target.style.borderColor = Gb; }}
+            onBlur={e => { if (!domainOk) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
           />
-          {/* Green check when domain looks valid */}
           {domainOk && (
             <div style={{
               position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
-              width: 20, height: 20, borderRadius: "50%",
-              background: Gs, border: `1px solid ${Gb}`,
+              width: 20, height: 20, borderRadius: "50%", background: Gs, border: `1px solid ${Gb}`,
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
               <svg width={11} height={11} viewBox="0 0 11 11" fill="none"
@@ -298,22 +179,17 @@ function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
 
         {/* Nombre del negocio */}
         <input
-          id="business-name"
-          name="businessName"
-          type="text"
-          value={businessName}
-          onChange={e => setBusinessName(e.target.value)}
-          placeholder="Nombre de tu negocio"
-          autoComplete="organization"
+          id="business-name" name="businessName" type="text"
+          value={businessName} onChange={e => setBusinessName(e.target.value)}
+          placeholder="Nombre de tu negocio" autoComplete="organization"
           style={inputStyle(bizOk)}
-          onFocus={e => { e.target.style.borderColor = Gb; }}
+          onFocus={e  => { e.target.style.borderColor = Gb; }}
           onBlur={e => { if (!bizOk) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
         />
 
-        {/* Collapsible: Más detalles */}
+        {/* Más detalles (opcional) */}
         <button
-          type="button"
-          onClick={() => setExpanded(e => !e)}
+          type="button" onClick={() => setExpanded(e => !e)}
           style={{
             display: "flex", alignItems: "center", justifyContent: "space-between",
             padding: "10px 14px", borderRadius: 10,
@@ -325,149 +201,85 @@ function AuditForm({ onSubmit }: { onSubmit: (data: AuditFormData) => void }) {
           }}
         >
           <span>Más detalles (opcional)</span>
-          <svg
-            width={14} height={14} viewBox="0 0 14 14" fill="none"
-            stroke="currentColor" strokeWidth={1.6} strokeLinecap="round"
-            style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}
-          >
+          <svg width={14} height={14} viewBox="0 0 14 14" fill="none"
+               stroke="currentColor" strokeWidth={1.6} strokeLinecap="round"
+               style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>
             <polyline points="3 5 7 9 11 5"/>
           </svg>
         </button>
 
         {expanded && (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
-            {/* Keywords chip input */}
             <div>
-              <label htmlFor="keywords" style={{
-                display: "block", marginBottom: 6,
-                fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
-                color: "rgba(255,255,255,0.4)", fontWeight: 500,
-                letterSpacing: "0.04em", textTransform: "uppercase",
-              }}>
+              <label htmlFor="keywords" style={{ display: "block", marginBottom: 6, fontFamily: "var(--font-inter), sans-serif", fontSize: 12, color: "rgba(255,255,255,0.4)", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>
                 ¿Cómo te buscaría un cliente en Google?
               </label>
               <ChipInput chips={keywords} onChange={setKeywords} />
-              <p style={{
-                marginTop: 6, fontSize: 11,
-                color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter), sans-serif",
-              }}>
-                Presiona Enter o coma para agregar cada frase · Máximo {MAX_CHIPS}
+              <p style={{ marginTop: 6, fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter), sans-serif" }}>
+                Presiona Enter o coma para agregar · Máximo {MAX_CHIPS}
               </p>
             </div>
 
-            {/* País */}
             <div>
-              <label htmlFor="country" style={{
-                display: "block", marginBottom: 6,
-                fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
-                color: "rgba(255,255,255,0.4)", fontWeight: 500,
-                letterSpacing: "0.04em", textTransform: "uppercase",
-              }}>
+              <label htmlFor="country" style={{ display: "block", marginBottom: 6, fontFamily: "var(--font-inter), sans-serif", fontSize: 12, color: "rgba(255,255,255,0.4)", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>
                 ¿Dónde están tus clientes?
               </label>
               <div style={{ position: "relative" }}>
                 <select
-                  id="country"
-                  name="countryCode"
-                  value={countryCode}
-                  onChange={e => setCountryCode(Number(e.target.value))}
-                  style={{
-                    width: "100%", padding: "14px 18px",
-                    background: "#111", border: `1px solid ${Gb}`,
-                    borderRadius: 12, color: "#fff",
-                    fontFamily: "var(--font-inter), sans-serif", fontSize: 15,
-                    outline: "none", appearance: "none", cursor: "pointer",
-                  }}
+                  id="country" name="countryCode"
+                  value={countryCode} onChange={e => setCountryCode(Number(e.target.value))}
+                  style={{ width: "100%", padding: "14px 18px", background: "#111", border: `1px solid ${Gb}`, borderRadius: 12, color: "#fff", fontFamily: "var(--font-inter), sans-serif", fontSize: 15, outline: "none", appearance: "none", cursor: "pointer" }}
                 >
-                  {COUNTRIES.map(c => (
-                    <option key={c.code} value={c.code}>{c.label}</option>
-                  ))}
+                  {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
                 </select>
-                <div style={{
-                  position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
-                  pointerEvents: "none",
-                }}>
-                  <svg width={14} height={14} viewBox="0 0 14 14" fill="none"
-                       stroke="rgba(255,255,255,0.4)" strokeWidth={1.6} strokeLinecap="round">
-                    <polyline points="3 5 7 9 11 5"/>
-                  </svg>
+                <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
+                  <svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={1.6} strokeLinecap="round"><polyline points="3 5 7 9 11 5"/></svg>
                 </div>
               </div>
             </div>
 
-            {/* Google Business */}
             <div>
-              <label htmlFor="google-business" style={{
-                display: "block", marginBottom: 6,
-                fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
-                color: "rgba(255,255,255,0.4)", fontWeight: 500,
-                letterSpacing: "0.04em", textTransform: "uppercase",
-              }}>
+              <label htmlFor="google-business" style={{ display: "block", marginBottom: 6, fontFamily: "var(--font-inter), sans-serif", fontSize: 12, color: "rgba(255,255,255,0.4)", fontWeight: 500, letterSpacing: "0.04em", textTransform: "uppercase" }}>
                 ¿Tienes perfil en Google Maps?
               </label>
               <input
-                id="google-business"
-                name="googleBusiness"
-                type="url"
-                value={googleBiz}
-                onChange={e => setGoogleBiz(e.target.value)}
-                placeholder="https://maps.google.com/?cid=..."
-                autoComplete="url"
+                id="google-business" name="googleBusiness" type="url"
+                value={googleBiz} onChange={e => setGoogleBiz(e.target.value)}
+                placeholder="https://maps.google.com/?cid=..." autoComplete="url"
                 style={inputStyle(googleBiz.length > 0)}
-                onFocus={e => { e.target.style.borderColor = Gb; }}
+                onFocus={e  => { e.target.style.borderColor = Gb; }}
                 onBlur={e => { if (!googleBiz) e.target.style.borderColor = "rgba(255,255,255,0.1)"; }}
               />
-              <p style={{
-                marginTop: 6, fontSize: 11,
-                color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter), sans-serif",
-              }}>
-                Pega el link de tu negocio en Google Maps · Opcional
+              <p style={{ marginTop: 6, fontSize: 11, color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-inter), sans-serif" }}>
+                Link de tu negocio en Google Maps · Opcional
               </p>
             </div>
           </div>
         )}
 
-        {/* CTA */}
         <button
-          type="submit"
-          disabled={!canSubmit}
+          type="submit" disabled={!canSubmit}
           style={{
-            marginTop: 4,
-            padding: "15px 32px", borderRadius: 12, border: "none",
-            background: canSubmit ? G : "rgba(93,184,72,0.25)",
-            color: "#0a0a0a",
+            marginTop: 4, padding: "15px 32px", borderRadius: 12, border: "none",
+            background: canSubmit ? G : "rgba(93,184,72,0.25)", color: "#0a0a0a",
             fontFamily: "var(--font-inter), sans-serif", fontWeight: 700, fontSize: 16,
             cursor: canSubmit ? "pointer" : "default", transition: "all 0.15s",
           }}
-          onMouseEnter={e => {
-            if (canSubmit) {
-              e.currentTarget.style.transform = "translateY(-1px)";
-              e.currentTarget.style.boxShadow = "0 8px 30px rgba(93,184,72,0.4)";
-            }
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "none";
-          }}
+          onMouseEnter={e => { if (canSubmit) { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 8px 30px rgba(93,184,72,0.4)"; } }}
+          onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
         >
           Generar mi reporte →
         </button>
 
-        {/* Helper text */}
-        <p style={{
-          textAlign: "center", fontSize: 12, marginTop: 4,
-          color: "rgba(255,255,255,0.28)",
-          fontFamily: "var(--font-inter), sans-serif", lineHeight: 1.6,
-        }}>
-          Sin tarjeta de crédito · Resultados en ~90 segundos · Cancela cuando quieras
+        <p style={{ textAlign: "center", fontSize: 12, marginTop: 4, color: "rgba(255,255,255,0.28)", fontFamily: "var(--font-inter), sans-serif", lineHeight: 1.6 }}>
+          Sin tarjeta de crédito · Resultados en ~90 segundos
         </p>
       </form>
     </div>
   );
 }
 
-// ── Scanning card ─────────────────────────────────────────────────────────────
+// ── ScanningCard ──────────────────────────────────────────────────────────────
 function ScanningCard({ domain, businessName }: { domain: string; businessName: string }) {
   const steps = [
     "Consultando DataForSEO SERP API…",
@@ -483,75 +295,27 @@ function ScanningCard({ domain, businessName }: { domain: string; businessName: 
   }, [steps.length]);
 
   return (
-    <div style={{
-      maxWidth: 480, margin: "80px auto",
-      background: "rgba(255,255,255,0.025)",
-      border: `1px solid ${Gb}`,
-      borderRadius: 20, padding: "40px 36px",
-      textAlign: "center",
-    }}>
-      <div style={{
-        width: 56, height: 56, borderRadius: 16,
-        background: Gs, border: `1px solid ${Gb}`,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        margin: "0 auto 24px",
-        animation: "pulse-soft 2s ease-in-out infinite",
-      }}>
-        <svg width={28} height={28} viewBox="0 0 24 24" fill="none"
-             stroke={G} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+    <div style={{ maxWidth: 480, margin: "60px auto", background: "rgba(255,255,255,0.025)", border: `1px solid ${Gb}`, borderRadius: 20, padding: "40px 36px", textAlign: "center" }}>
+      <div style={{ width: 56, height: 56, borderRadius: 16, background: Gs, border: `1px solid ${Gb}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px", animation: "pulse-soft 2s ease-in-out infinite" }}>
+        <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke={G} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
         </svg>
       </div>
-
-      <div style={{ fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 18, marginBottom: 8 }}>
-        Generando tu reporte
-      </div>
-      <div style={{
-        fontFamily: "var(--font-syne), sans-serif", fontWeight: 700,
-        fontSize: 20, color: "#fff", marginBottom: 4, letterSpacing: "-0.02em",
-      }}>
-        {businessName}
-      </div>
-      <div style={{
-        fontFamily: "var(--font-mono), monospace", fontSize: 13,
-        color: "rgba(255,255,255,0.4)", marginBottom: 28,
-      }}>
-        {domain}
-      </div>
-      <div style={{
-        fontFamily: "var(--font-inter), sans-serif", fontSize: 13,
-        color: "rgba(255,255,255,0.35)", marginBottom: 32,
-      }}>
-        ~90 segundos · datos en tiempo real de Google
-      </div>
-
+      <div style={{ fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 18, marginBottom: 8 }}>Generando tu reporte</div>
+      <div style={{ fontFamily: "var(--font-syne), sans-serif", fontWeight: 700, fontSize: 20, color: "#fff", marginBottom: 4, letterSpacing: "-0.02em" }}>{businessName}</div>
+      <div style={{ fontFamily: "var(--font-mono), monospace", fontSize: 13, color: "rgba(255,255,255,0.4)", marginBottom: 28 }}>{domain}</div>
+      <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 13, color: "rgba(255,255,255,0.35)", marginBottom: 32 }}>~90 segundos · datos en tiempo real de Google</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
         {steps.map((s, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
-              background: i <= step ? Gs : "rgba(255,255,255,0.04)",
-              border: `1px solid ${i <= step ? Gb : "rgba(255,255,255,0.08)"}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
+            <div style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, background: i <= step ? Gs : "rgba(255,255,255,0.04)", border: `1px solid ${i <= step ? Gb : "rgba(255,255,255,0.08)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
               {i < step ? (
-                <svg width={10} height={10} viewBox="0 0 10 10" fill="none"
-                     stroke={G} strokeWidth={1.6} strokeLinecap="round">
-                  <polyline points="2 5 4 7 8 3"/>
-                </svg>
+                <svg width={10} height={10} viewBox="0 0 10 10" fill="none" stroke={G} strokeWidth={1.6} strokeLinecap="round"><polyline points="2 5 4 7 8 3"/></svg>
               ) : i === step ? (
-                <div style={{
-                  width: 6, height: 6, borderRadius: "50%", background: G,
-                  animation: "pulse-dot 1.2s ease-in-out infinite",
-                }} />
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: G, animation: "pulse-dot 1.2s ease-in-out infinite" }} />
               ) : null}
             </div>
-            <span style={{
-              fontFamily: "var(--font-inter), sans-serif", fontSize: 13,
-              color: i <= step ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)",
-            }}>
-              {s}
-            </span>
+            <span style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 13, color: i <= step ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)" }}>{s}</span>
           </div>
         ))}
       </div>
@@ -559,153 +323,73 @@ function ScanningCard({ domain, businessName }: { domain: string; businessName: 
   );
 }
 
-// ── Top bar ───────────────────────────────────────────────────────────────────
-function TopBar({ domain, businessName, onReset, freeReportUsed }: {
-  domain: string;
-  businessName: string;
-  onReset: () => void;
-  freeReportUsed: boolean;
-}) {
+// ── Resumen placeholder (cuando ya hay reporte) ───────────────────────────────
+function ResumeSection() {
   return (
-    <div style={{
-      position: "sticky", top: 0, zIndex: 50,
-      background: "rgba(10,10,10,0.9)", backdropFilter: "blur(12px)",
-      borderBottom: "1px solid rgba(255,255,255,0.07)",
-      padding: "12px 32px",
-      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-    }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <Image src="/logo_eda_sin_background.png" alt="EDA" width={28} height={28} />
-          <Image src="/eda.png" alt="EDA" width={40} height={16} style={{ filter: "brightness(0) invert(1)" }} />
-        </div>
-        <div style={{ width: 1, height: 20, background: "rgba(255,255,255,0.1)", flexShrink: 0 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <span style={{
-            fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 600,
-            color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
-            {businessName}
-          </span>
-          <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 13, flexShrink: 0 }}>·</span>
-          <span style={{
-            fontFamily: "var(--font-mono), monospace", fontSize: 12,
-            color: "rgba(255,255,255,0.45)",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
-            {domain}
-          </span>
-        </div>
+    <div style={{ maxWidth: 800, margin: "0 auto", padding: "48px 28px" }}>
+      <div style={{ fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 20, marginBottom: 12, textAlign: "center" }}>
+        Tu reporte está listo
       </div>
-
-      {freeReportUsed ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <span style={{
-            fontFamily: "var(--font-inter), sans-serif", fontSize: 12,
-            color: "rgba(255,255,255,0.3)",
-          }}>
-            Crea una cuenta para más reportes
-          </span>
-          <button
-            disabled
-            style={{
-              padding: "7px 14px", borderRadius: 8,
-              background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)",
-              color: "rgba(255,255,255,0.2)",
-              fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 500,
-              cursor: "not-allowed", flexShrink: 0,
-            }}
-          >
-            + Nueva búsqueda
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={onReset}
-          style={{
-            padding: "7px 14px", borderRadius: 8,
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)",
-            color: "rgba(255,255,255,0.6)",
-            fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 500,
-            cursor: "pointer", transition: "all 0.15s", flexShrink: 0,
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = Gs;
-            e.currentTarget.style.borderColor = Gb;
-            e.currentTarget.style.color = G;
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-            e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-            e.currentTarget.style.color = "rgba(255,255,255,0.6)";
-          }}
-        >
-          + Nueva búsqueda
-        </button>
-      )}
-    </div>
-  );
-}
-
-// ── Error card ────────────────────────────────────────────────────────────────
-function ErrorCard({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div style={{
-      maxWidth: 480, margin: "80px auto", padding: "40px 36px",
-      background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.3)",
-      borderRadius: 20, textAlign: "center",
-    }}>
-      <div style={{
-        fontFamily: "var(--font-syne), sans-serif", fontWeight: 700,
-        fontSize: 18, color: "#ef4444", marginBottom: 12,
+      <h1 style={{
+        fontFamily: "var(--font-syne), sans-serif", fontWeight: 800,
+        fontSize: "clamp(26px, 3.5vw, 40px)", color: "#fff",
+        letterSpacing: "-0.03em", textAlign: "center", marginBottom: 14,
       }}>
-        Error al analizar
-      </div>
+        Resumen de salud digital
+      </h1>
       <p style={{
-        fontFamily: "var(--font-inter), sans-serif", fontSize: 14,
-        color: "rgba(255,255,255,0.5)", marginBottom: 24, lineHeight: 1.6,
+        fontFamily: "var(--font-inter), sans-serif", fontSize: 15,
+        color: "rgba(255,255,255,0.4)", textAlign: "center", marginBottom: 48, lineHeight: 1.6,
       }}>
-        {message}
+        Explora cada sección desde el panel lateral para ver el análisis completo.
       </p>
-      <button
-        onClick={onRetry}
-        style={{
-          padding: "10px 24px", borderRadius: 10, border: "none",
-          background: G, color: "#0a0a0a",
-          fontFamily: "var(--font-inter), sans-serif", fontWeight: 700, fontSize: 14, cursor: "pointer",
-        }}
-      >
-        Intentar de nuevo
-      </button>
+
+      {/* Cards de acceso rápido */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+        {[
+          { label: "Posicionamiento",    href: "/dashboard/posicionamiento",       emoji: "🔍", desc: "Cómo apareces en Google" },
+          { label: "Sitio web",          href: "/dashboard/sitio-web",             emoji: "🌐", desc: "Auditoría técnica y velocidad" },
+          { label: "Perfil de Google",   href: "/dashboard/perfil-google",         emoji: "📍", desc: "Google Maps y reseñas" },
+          { label: "Investigación",      href: "/dashboard/investigacion-mercado", emoji: "📊", desc: "Keywords y volumen" },
+          { label: "Prospectos",         href: "/dashboard/prospectos",            emoji: "🎯", desc: "Clientes potenciales" },
+          { label: "Automatizaciones",   href: "/dashboard/automatizaciones",      emoji: "⚡", desc: "Acciones automáticas — BETA" },
+        ].map(c => (
+          <a
+            key={c.href} href={c.href}
+            style={{
+              display: "block", padding: "20px 20px",
+              background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)",
+              borderRadius: 14, textDecoration: "none", transition: "all 0.15s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = Gs; e.currentTarget.style.borderColor = Gb; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.025)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 10 }}>{c.emoji}</div>
+            <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 600, color: "#fff", marginBottom: 4 }}>{c.label}</div>
+            <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 12, color: "rgba(255,255,255,0.38)" }}>{c.desc}</div>
+          </a>
+        ))}
+      </div>
     </div>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-type Phase = "input" | "scanning" | "result" | "error";
+type Phase = "form" | "scanning" | "done" | "error";
 
-export default function DashboardPage() {
-  const [phase,           setPhase]           = useState<Phase>("input");
-  const [lastForm,        setLastForm]        = useState<AuditFormData | null>(null);
-  const [serpData,        setSerpData]        = useState<SerpData | null>(null);
-  const [errMsg,          setErrMsg]          = useState("");
-  const [freeReportUsed,  setFreeReportUsed]  = useState(false);
+export default function DashboardResumen() {
+  const router = useRouter();
+  const [phase,       setPhase]       = useState<Phase>("form");
+  const [currentForm, setCurrentForm] = useState<AuditFormData | null>(null);
+  const [errMsg,      setErrMsg]      = useState("");
 
-  // Restore cached free report on mount
   useEffect(() => {
-    const stored = readFreeReport();
-    if (stored) {
-      setLastForm(stored.formData);
-      setSerpData(stored.serpData);
-      setFreeReportUsed(true);
-      setPhase("result");
-    }
+    if (readFreeReport()) setPhase("done");
   }, []);
 
   const runAudit = useCallback(async (data: AuditFormData) => {
-    setLastForm(data);
+    setCurrentForm(data);
     setPhase("scanning");
-    setSerpData(null);
     setErrMsg("");
 
     try {
@@ -727,79 +411,39 @@ export default function DashboardPage() {
       }
 
       saveFreeReport(serp, data);
-      setFreeReportUsed(true);
-      setSerpData(serp);
-      setPhase("result");
+      // Redirect to posicionamiento to show SERP results immediately
+      router.push("/dashboard/posicionamiento");
     } catch (err) {
       setErrMsg(err instanceof Error ? err.message : "Error desconocido");
       setPhase("error");
     }
-  }, []);
-
-  const handleSearchAgain = useCallback((kw: string) => {
-    if (lastForm) runAudit({ ...lastForm, keywords: [kw] });
-  }, [lastForm, runAudit]);
-
-  const handleReset = () => {
-    if (freeReportUsed) return;
-    setPhase("input");
-    setSerpData(null);
-    setLastForm(null);
-    setErrMsg("");
-  };
+  }, [router]);
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0a0a", position: "relative" }}>
-      {/* Dot grid */}
+    <div style={{ minHeight: "60vh", position: "relative" }}>
       <div style={{
         position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
-        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px)",
+        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)",
         backgroundSize: "32px 32px",
         maskImage: "radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 90%)",
         WebkitMaskImage: "radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 90%)",
       }} />
 
       <div style={{ position: "relative", zIndex: 1 }}>
-
-        {phase === "input" && (
-          <>
-            <div style={{
-              padding: "20px 32px",
-              display: "flex", alignItems: "center", gap: 10,
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-            }}>
-              <Image src="/logo_eda_sin_background.png" alt="EDA" width={28} height={28} />
-              <Image src="/eda.png" alt="EDA" width={40} height={16} style={{ filter: "brightness(0) invert(1)" }} />
-              <span style={{
-                marginLeft: 8, fontSize: 12, color: "rgba(255,255,255,0.35)",
-                fontFamily: "var(--font-inter), sans-serif",
-                padding: "2px 8px", borderRadius: 999,
-                border: "1px solid rgba(255,255,255,0.08)",
-              }}>
-                Dashboard
-              </span>
-            </div>
-            <AuditForm onSubmit={runAudit} />
-          </>
+        {phase === "form"     && <AuditForm onSubmit={runAudit} />}
+        {phase === "scanning" && currentForm && (
+          <ScanningCard domain={currentForm.domain} businessName={currentForm.businessName} />
         )}
-
-        {phase === "scanning" && lastForm && (
-          <ScanningCard domain={lastForm.domain} businessName={lastForm.businessName} />
+        {phase === "done"     && <ResumeSection />}
+        {phase === "error"    && (
+          <div style={{ maxWidth: 480, margin: "80px auto", padding: "40px 36px", background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 20, textAlign: "center" }}>
+            <div style={{ fontFamily: "var(--font-syne), sans-serif", fontWeight: 700, fontSize: 18, color: "#ef4444", marginBottom: 12 }}>Error al analizar</div>
+            <p style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 14, color: "rgba(255,255,255,0.5)", marginBottom: 24, lineHeight: 1.6 }}>{errMsg}</p>
+            <button onClick={() => setPhase("form")} style={{ padding: "10px 24px", borderRadius: 10, border: "none", background: G, color: "#0a0a0a", fontFamily: "var(--font-inter), sans-serif", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+              Intentar de nuevo
+            </button>
+          </div>
         )}
-
-        {phase === "result" && serpData && lastForm && (
-          <>
-            <TopBar domain={lastForm.domain} businessName={lastForm.businessName} onReset={handleReset} freeReportUsed={freeReportUsed} />
-            <div style={{ maxWidth: 1280, margin: "0 auto", padding: "40px 32px 60px" }}>
-              <SerpSection data={serpData} onSearchAgain={handleSearchAgain} />
-            </div>
-          </>
-        )}
-
-        {phase === "error" && (
-          <ErrorCard message={errMsg} onRetry={handleReset} />
-        )}
-
       </div>
     </div>
   );

@@ -1,3 +1,11 @@
+export interface AuditFormData {
+  domain: string;
+  businessName: string;
+  keywords: string[];
+  countryCode: number;
+  googleBusiness: string;
+}
+
 export interface SerpSitelink {
   title: string;
   url: string;

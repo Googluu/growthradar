@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EDA — Salud Digital</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0a0a0a; color: #fff; min-height: 100vh;
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      padding: 40px 24px;
+    }
+    button { font-family: inherit; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes drawArc {
+      from { stroke-dashoffset: var(--len); }
+      to   { stroke-dashoffset: var(--off); }
+    }
+    @keyframes growBar {
+      from { transform: scaleX(0); }
+      to   { transform: scaleX(1); }
+    }
+    @keyframes count {
+      from { content: '0'; }
+    }
+
+    .salud-hero { animation: fadeUp 0.6s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+    .salud-row { animation: fadeUp 0.5s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+    .salud-arc {
+      animation: drawArc 1.2s cubic-bezier(0.2, 0.9, 0.3, 1) 0.2s both;
+    }
+    .salud-bar-fill {
+      transform-origin: left;
+      animation: growBar 0.9s cubic-bezier(0.2, 0.9, 0.3, 1) var(--delay, 0s) both;
+    }
+    .salud-alert { animation: fadeUp 0.5s 0.6s ease both; }
+
+    @media (max-width: 900px) {
+      .hero-split { grid-template-columns: 1fr !important; }
+      .hero-radial-col { padding: 24px !important; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+const { useState, useEffect } = React;
+
+const C = {
+  bg: '#0a0a0a',
+  bg2: '#171717',
+  card: 'rgba(255,255,255,0.025)',
+  border: 'rgba(255,255,255,0.07)',
+  borderStrong: 'rgba(255,255,255,0.14)',
+  text: '#fff',
+  text2: 'rgba(255,255,255,0.65)',
+  text3: 'rgba(255,255,255,0.45)',
+  text4: 'rgba(255,255,255,0.28)',
+  green: '#22c55e',
+  greenSoft: 'rgba(34,197,94,0.15)',
+  greenBorder: 'rgba(34,197,94,0.35)',
+  amber: '#f59e0b',
+  red: '#ef4444',
+  blue: '#60a5fa',
+  purple: '#a78bfa',
+  pink: '#f472b6',
+};
+
+const scoreColor = (s) => s == null ? C.text3 : s >= 80 ? C.green : s >= 50 ? C.amber : C.red;
+const scoreLabel = (s) => s == null ? '—' : s >= 80 ? 'Excelente' : s >= 50 ? 'Mejorable' : 'Crítico';
+
+// ─── Icons (lucide-style) ───
+const Icon = ({ size = 16, sw = 1.6, children, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, ...style }}>
+    {children}
+  </svg>
+);
+const IconSearch = (p) => <Icon {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Icon>;
+const IconZap    = (p) => <Icon {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" fill="currentColor" fillOpacity="0.15"/></Icon>;
+const IconUsers  = (p) => <Icon {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Icon>;
+const IconStar   = (p) => <Icon {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor" fillOpacity="0.15"/></Icon>;
+const IconLock   = (p) => <Icon {...p}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></Icon>;
+const IconArrowR = (p) => <Icon {...p}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></Icon>;
+const IconInfo   = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></Icon>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Animated number counter (counts up from 0 to value on mount)
+// ─────────────────────────────────────────────────────────────────────────────
+function useCountUp(target, duration = 1200, delay = 200) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    let raf;
+    const start = performance.now() + delay;
+    const tick = (now) => {
+      const t = Math.max(0, now - start);
+      const p = Math.min(1, t / duration);
+      // easeOutCubic
+      const eased = 1 - Math.pow(1 - p, 3);
+      setValue(Math.round(target * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration, delay]);
+  return value;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Radial gauge (composite score)
+// ─────────────────────────────────────────────────────────────────────────────
+function RadialGauge({ score, available, total, size = 280 }) {
+  const color = scoreColor(score);
+  const stroke = 22;
+  const r = (size - stroke) / 2;
+  const cx = size / 2, cy = size / 2;
+  const circ = 2 * Math.PI * r;
+  const sweep = 270; // visible degrees
+  const arcLen = (sweep / 360) * circ;
+  const offset = (1 - (score || 0) / 100) * arcLen;
+
+  const display = useCountUp(score || 0);
+
+  return (
+    <div style={{
+      position: 'relative', width: size, height: size,
+      margin: '0 auto',
+    }}>
+      {/* Color glow behind */}
+      <div style={{
+        position: 'absolute', inset: -20,
+        background: `radial-gradient(circle, ${color}22, transparent 65%)`,
+        pointerEvents: 'none', borderRadius: '50%',
+      }}/>
+
+      <svg width={size} height={size} style={{ transform: 'rotate(135deg)', display: 'block', position: 'relative' }}>
+        <defs>
+          <linearGradient id="radial-grad" x1="0" y1="0" x2="1" y2="1" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stopColor={color}/>
+            <stop offset="100%" stopColor={color} stopOpacity="0.65"/>
+          </linearGradient>
+          <filter id="radial-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        {/* Track */}
+        <circle cx={cx} cy={cy} r={r} fill="none"
+          stroke="rgba(255,255,255,0.06)" strokeWidth={stroke}
+          strokeDasharray={`${arcLen} ${circ}`} strokeLinecap="round"/>
+
+        {/* Progress */}
+        <circle cx={cx} cy={cy} r={r} fill="none"
+          stroke="url(#radial-grad)" strokeWidth={stroke}
+          strokeDasharray={`${arcLen} ${circ}`}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          filter="url(#radial-glow)"
+          className="salud-arc"
+          style={{ '--len': arcLen, '--off': offset }}/>
+
+        {/* Tick marks at 0/25/50/75/100 */}
+        {[0, 0.25, 0.5, 0.75, 1].map((t, i) => {
+          const angle = (t * sweep) * Math.PI / 180;
+          const x1 = cx + Math.cos(angle) * (r - stroke / 2 - 4);
+          const y1 = cy + Math.sin(angle) * (r - stroke / 2 - 4);
+          const x2 = cx + Math.cos(angle) * (r - stroke / 2 - 12);
+          const y2 = cy + Math.sin(angle) * (r - stroke / 2 - 12);
+          return (
+            <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeLinecap="round"/>
+          );
+        })}
+      </svg>
+
+      {/* Center content */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        pointerEvents: 'none',
+      }}>
+        <div style={{
+          fontFamily: 'Syne, sans-serif', fontWeight: 800,
+          fontSize: 84, lineHeight: 0.95,
+          color: color, letterSpacing: '-0.04em',
+          fontVariantNumeric: 'tabular-nums',
+        }}>{display}</div>
+        <div style={{
+          fontSize: 13, color: C.text3, fontWeight: 500,
+          marginTop: 6, fontFamily: 'Inter',
+        }}>/ 100</div>
+        <div style={{
+          fontFamily: 'Inter', fontSize: 13, fontWeight: 700,
+          color: color, marginTop: 12,
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+          padding: '4px 12px',
+          background: `${color}18`,
+          border: `1px solid ${color}40`,
+          borderRadius: 999,
+        }}>{scoreLabel(score)}</div>
+      </div>
+
+      {/* Tick labels */}
+      {[
+        { v: 0, label: '0' },
+        { v: 50, label: '50' },
+        { v: 100, label: '100' },
+      ].map((t, i) => {
+        // Match the rotated coordinate system: start at 135deg, sweep 270deg clockwise.
+        const angleDeg = 135 + (t.v / 100) * 270;
+        const angleRad = angleDeg * Math.PI / 180;
+        const dist = r + stroke / 2 + 14;
+        const x = cx + Math.cos(angleRad) * dist;
+        const y = cy + Math.sin(angleRad) * dist;
+        return (
+          <div key={i} style={{
+            position: 'absolute',
+            left: x, top: y,
+            transform: 'translate(-50%, -50%)',
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: 10, color: C.text4, fontWeight: 600,
+            pointerEvents: 'none',
+          }}>{t.label}</div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dimension row
+// ─────────────────────────────────────────────────────────────────────────────
+function DimensionRow({ icon: I, label, color, dim, totalWeight, delay }) {
+  const hasData = dim.score != null;
+  const score = hasData ? dim.score : 0;
+  const sColor = hasData ? scoreColor(dim.score) : C.text4;
+  const weightPct = totalWeight > 0 ? Math.round((dim.weight_used / totalWeight) * 100) : 0;
+
+  return (
+    <div className="salud-row" style={{
+      display: 'flex', alignItems: 'center', gap: 16,
+      padding: '14px 0',
+      opacity: hasData ? 1 : 0.6,
+      animationDelay: `${delay}s`,
+    }}>
+      {/* Icon */}
+      <div style={{
+        width: 44, height: 44, borderRadius: 12,
+        background: hasData ? `${color}18` : 'rgba(255,255,255,0.04)',
+        color: hasData ? color : C.text3,
+        border: `1px solid ${hasData ? `${color}40` : C.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+        position: 'relative',
+      }}>
+        <I size={20}/>
+        {!hasData && (
+          <div style={{
+            position: 'absolute', bottom: -3, right: -3,
+            width: 16, height: 16, borderRadius: '50%',
+            background: C.bg2, color: C.text3,
+            border: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <IconLock size={9}/>
+          </div>
+        )}
+      </div>
+
+      {/* Label + bar + weight */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8, gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 15, color: C.text, fontWeight: 600, fontFamily: 'Inter' }}>
+              {label}
+            </span>
+            {!hasData && (
+              <span style={{
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999,
+                background: 'rgba(255,255,255,0.06)',
+                color: C.text3, border: `1px solid ${C.border}`,
+                letterSpacing: '0.04em', textTransform: 'uppercase',
+              }}>Próximamente</span>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            {hasData ? (
+              <>
+                <span style={{
+                  fontFamily: 'Syne, sans-serif', fontWeight: 800,
+                  fontSize: 26, color: sColor, lineHeight: 1,
+                  letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums',
+                }}>{dim.score}</span>
+                <span style={{ fontSize: 12, color: C.text3 }}>/100</span>
+              </>
+            ) : (
+              <span style={{ fontSize: 13, color: C.text3, fontStyle: 'italic' }}>Sin datos</span>
+            )}
+          </div>
+        </div>
+
+        {/* Bar */}
+        <div style={{
+          height: 8, borderRadius: 999,
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.04)',
+          overflow: 'hidden', position: 'relative',
+        }}>
+          {hasData && (
+            <div className="salud-bar-fill" style={{
+              width: `${score}%`, height: '100%',
+              background: `linear-gradient(90deg, ${sColor}cc, ${sColor})`,
+              borderRadius: 999,
+              boxShadow: `0 0 10px ${sColor}50`,
+              '--delay': `${delay + 0.15}s`,
+            }}/>
+          )}
+        </div>
+
+        {/* Weight footer */}
+        <div style={{
+          fontSize: 11.5, color: C.text3, marginTop: 7,
+          fontFamily: 'Inter',
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          {hasData ? (
+            <>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', color: C.text2 }}>
+                {weightPct}%
+              </span>
+              <span>del puntaje total</span>
+              <span style={{
+                fontFamily: 'JetBrains Mono, monospace', color: C.text4,
+                fontSize: 10,
+              }}>· peso base {Math.round(dim.weight_base * 100)}%</span>
+            </>
+          ) : (
+            <span style={{ color: C.text4, fontStyle: 'italic' }}>No contribuye al puntaje</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Alert bar
+// ─────────────────────────────────────────────────────────────────────────────
+function MissingDimensionsAlert({ available, total }) {
+  return (
+    <div className="salud-alert" style={{
+      marginTop: 20,
+      display: 'flex', alignItems: 'center', gap: 14,
+      padding: '14px 18px',
+      background: 'linear-gradient(90deg, rgba(245,158,11,0.10), rgba(245,158,11,0.04))',
+      border: `1px solid rgba(245,158,11,0.28)`,
+      borderRadius: 12,
+      flexWrap: 'wrap',
+    }}>
+      <div style={{
+        width: 32, height: 32, borderRadius: 9,
+        background: 'rgba(245,158,11,0.18)',
+        border: '1px solid rgba(245,158,11,0.4)',
+        color: C.amber,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        flexShrink: 0,
+      }}>
+        <IconInfo size={16}/>
+      </div>
+      <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ fontSize: 14, color: C.text, fontWeight: 600, marginBottom: 2 }}>
+          Tu puntaje se calcula con {available} de {total} dimensiones
+        </div>
+        <div style={{ fontSize: 12.5, color: C.text2 }}>
+          Activa más fuentes para un panorama completo de tu salud digital.
+        </div>
+      </div>
+      <button style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        background: C.amber, color: C.bg, border: 'none',
+        fontWeight: 700, fontSize: 13, padding: '9px 16px',
+        borderRadius: 8, cursor: 'pointer', fontFamily: 'Inter',
+        transition: 'all 0.15s',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 18px ${C.amber}40`; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
+        Activar fuentes <IconArrowR size={13}/>
+      </button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hero
+// ─────────────────────────────────────────────────────────────────────────────
+function SaludDigitalHero({ data }) {
+  const { health_score, available_dimensions, total_dimensions, breakdown } = data;
+  const totalWeight = Object.values(breakdown).reduce((s, d) => s + (d.weight_used || 0), 0);
+
+  const dims = [
+    { key: 'seo_score',         label: 'SEO',         icon: IconSearch, color: C.green,  dim: breakdown.seo_score },
+    { key: 'performance_score', label: 'Rendimiento', icon: IconZap,    color: C.amber,  dim: breakdown.performance_score },
+    { key: 'social_score',      label: 'Social',      icon: IconUsers,  color: C.blue,   dim: breakdown.social_score },
+    { key: 'reputation_score',  label: 'Reputación',  icon: IconStar,   color: C.purple, dim: breakdown.reputation_score },
+  ];
+
+  return (
+    <div className="salud-hero" style={{
+      background: `
+        radial-gradient(ellipse 80% 60% at 20% 0%, ${scoreColor(health_score)}10, transparent 70%),
+        linear-gradient(180deg, #171717, #131313)
+      `,
+      border: `1px solid ${C.border}`,
+      borderRadius: 24,
+      overflow: 'hidden',
+      position: 'relative',
+    }}>
+      {/* Subtle background dot pattern */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)`,
+        backgroundSize: '24px 24px',
+        maskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 90%)',
+        WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 50% 50%, black 40%, transparent 90%)',
+        opacity: 0.6,
+      }}/>
+
+      <div className="hero-split" style={{
+        display: 'grid', gridTemplateColumns: '40% 60%',
+        position: 'relative',
+      }}>
+        {/* ── LEFT: radial ──────────────────────────────────────── */}
+        <div className="hero-radial-col" style={{
+          padding: '44px 36px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          borderRight: `1px solid ${C.border}`,
+          position: 'relative',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 18 }}>
+              Tu salud digital
+            </div>
+          </div>
+          <h1 style={{
+            fontFamily: 'Syne, sans-serif', fontWeight: 800,
+            fontSize: 28, letterSpacing: '-0.02em',
+            color: C.text, marginBottom: 28, textAlign: 'center',
+          }}>Salud Digital</h1>
+
+          <RadialGauge
+            score={health_score}
+            available={available_dimensions}
+            total={total_dimensions}
+          />
+
+          <div style={{
+            marginTop: 28, padding: '10px 16px',
+            background: 'rgba(255,255,255,0.025)',
+            border: `1px solid ${C.border}`,
+            borderRadius: 999,
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+          }}>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {Array.from({ length: total_dimensions }).map((_, i) => (
+                <span key={i} style={{
+                  width: 7, height: 7, borderRadius: '50%',
+                  background: i < available_dimensions ? C.green : 'rgba(255,255,255,0.15)',
+                  boxShadow: i < available_dimensions ? `0 0 6px ${C.green}80` : 'none',
+                }}/>
+              ))}
+            </div>
+            <span style={{ fontSize: 12.5, color: C.text2, fontFamily: 'Inter' }}>
+              <strong style={{ color: C.text, fontWeight: 700, fontFamily: 'Syne' }}>
+                {available_dimensions}
+              </strong>
+              {' '}de{' '}
+              <strong style={{ color: C.text, fontWeight: 700, fontFamily: 'Syne' }}>
+                {total_dimensions}
+              </strong>
+              {' '}dimensiones evaluadas
+            </span>
+          </div>
+        </div>
+
+        {/* ── RIGHT: breakdown ──────────────────────────────────── */}
+        <div style={{
+          padding: '44px 40px',
+          display: 'flex', flexDirection: 'column', justifyContent: 'center',
+          position: 'relative',
+        }}>
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 17, marginBottom: 4 }}>
+              Desglose
+            </div>
+            <h2 style={{
+              fontFamily: 'Syne, sans-serif', fontWeight: 700,
+              fontSize: 24, color: C.text, letterSpacing: '-0.015em',
+            }}>Cómo se compone tu puntaje</h2>
+            <p style={{ fontSize: 13, color: C.text3, marginTop: 4 }}>
+              Cada dimensión aporta proporcional a su peso. Las inactivas no penalizan.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', divider: 'auto' }}>
+            {dims.map((d, i) => (
+              <React.Fragment key={d.key}>
+                {i > 0 && <div style={{ height: 1, background: C.border }}/>}
+                <DimensionRow
+                  icon={d.icon} label={d.label} color={d.color}
+                  dim={d.dim} totalWeight={totalWeight}
+                  delay={0.15 + i * 0.08}
+                />
+              </React.Fragment>
+            ))}
+          </div>
+
+          {available_dimensions < total_dimensions && (
+            <MissingDimensionsAlert
+              available={available_dimensions} total={total_dimensions}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo / preview shell — also lets you flip a few sample states
+// ─────────────────────────────────────────────────────────────────────────────
+const SAMPLES = {
+  partial: {
+    health_score: 64,
+    available_dimensions: 2,
+    total_dimensions: 4,
+    breakdown: {
+      seo_score:         { score: 68, weight_base: 0.35, weight_used: 0.58 },
+      performance_score: { score: 58, weight_base: 0.25, weight_used: 0.42 },
+      social_score:      { score: null, weight_base: 0.20, weight_used: 0 },
+      reputation_score:  { score: null, weight_base: 0.20, weight_used: 0 },
+    },
+  },
+  excellent: {
+    health_score: 88,
+    available_dimensions: 4,
+    total_dimensions: 4,
+    breakdown: {
+      seo_score:         { score: 92, weight_base: 0.35, weight_used: 0.35 },
+      performance_score: { score: 86, weight_base: 0.25, weight_used: 0.25 },
+      social_score:      { score: 84, weight_base: 0.20, weight_used: 0.20 },
+      reputation_score:  { score: 91, weight_base: 0.20, weight_used: 0.20 },
+    },
+  },
+  critical: {
+    health_score: 32,
+    available_dimensions: 3,
+    total_dimensions: 4,
+    breakdown: {
+      seo_score:         { score: 28, weight_base: 0.35, weight_used: 0.44 },
+      performance_score: { score: 41, weight_base: 0.25, weight_used: 0.31 },
+      social_score:      { score: 22, weight_base: 0.20, weight_used: 0.25 },
+      reputation_score:  { score: null, weight_base: 0.20, weight_used: 0 },
+    },
+  },
+};
+
+function App() {
+  const [sample, setSample] = useState('partial');
+  return (
+    <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+      {/* Variant switcher */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        marginBottom: 28, paddingBottom: 18,
+        borderBottom: `1px solid ${C.border}`,
+        flexWrap: 'wrap', gap: 16,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 8, background: C.green,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'Syne', fontWeight: 800, color: C.bg, fontSize: 14,
+          }}>E</div>
+          <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: C.text }}>EDA</div>
+          <div style={{
+            fontSize: 12, color: C.text3,
+            padding: '2px 8px', borderRadius: 999,
+            border: `1px solid ${C.border}`, marginLeft: 8,
+          }}>Audit · Hero</div>
+        </div>
+
+        <div style={{
+          display: 'flex', gap: 4, padding: 4,
+          background: 'rgba(255,255,255,0.04)',
+          border: `1px solid ${C.border}`,
+          borderRadius: 10,
+        }}>
+          {[
+            { v: 'partial',   l: 'Parcial · 64' },
+            { v: 'excellent', l: 'Excelente · 88' },
+            { v: 'critical',  l: 'Crítico · 32' },
+          ].map(opt => (
+            <button key={opt.v} onClick={() => setSample(opt.v)} style={{
+              padding: '6px 12px', borderRadius: 7,
+              background: sample === opt.v ? C.greenSoft : 'transparent',
+              border: `1px solid ${sample === opt.v ? C.greenBorder : 'transparent'}`,
+              color: sample === opt.v ? C.green : C.text2,
+              fontSize: 12, fontWeight: 600, fontFamily: 'Inter',
+              cursor: 'pointer', transition: 'all 0.15s',
+            }}>{opt.l}</button>
+          ))}
+        </div>
+      </div>
+
+      <SaludDigitalHero key={sample} data={SAMPLES[sample]}/>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>

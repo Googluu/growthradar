@@ -1,0 +1,1634 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EDA — Auditoría On-Page</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: #0a0a0a; color: #fff; min-height: 100vh;
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0a0a0a; }
+    ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+    button { font-family: inherit; }
+
+    @keyframes radial-draw { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: var(--off); } }
+
+    @media (max-width: 1100px) {
+      .hero-grid { grid-template-columns: 1fr !important; }
+      .two-col { grid-template-columns: 1fr !important; }
+      .perf-grid { grid-template-columns: repeat(2, 1fr) !important; }
+      .social-grid { grid-template-columns: 1fr !important; }
+    }
+    @media (max-width: 700px) {
+      .perf-grid { grid-template-columns: 1fr !important; }
+      .hero-kpis { flex-direction: row !important; flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+const { useState, useMemo, useEffect } = React;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Design tokens
+// ─────────────────────────────────────────────────────────────────────────────
+const C = {
+  bg: '#0a0a0a',
+  card: 'rgba(255,255,255,0.025)',
+  cardHover: 'rgba(255,255,255,0.045)',
+  border: 'rgba(255,255,255,0.07)',
+  borderStrong: 'rgba(255,255,255,0.14)',
+  text: '#fff',
+  text2: 'rgba(255,255,255,0.65)',
+  text3: 'rgba(255,255,255,0.45)',
+  text4: 'rgba(255,255,255,0.28)',
+  green: '#22c55e',
+  greenSoft: 'rgba(34,197,94,0.15)',
+  greenBorder: 'rgba(34,197,94,0.35)',
+  yellow: '#fbbf24',
+  amber: '#f59e0b',
+  orange: '#fb923c',
+  red: '#ef4444',
+  blue: '#60a5fa',
+  purple: '#a78bfa',
+  pink: '#f472b6',
+};
+
+// Traffic-light helpers
+const scoreColor = (s) => s >= 80 ? C.green : s >= 50 ? C.amber : C.red;
+const scoreLabel = (s) => s >= 80 ? 'Excelente' : s >= 50 ? 'Mejorable' : 'Crítico';
+
+// Core Web Vitals thresholds (Google)
+const cwvColor = (metric, v) => {
+  if (metric === 'LCP') return v < 2500 ? C.green : v < 4000 ? C.amber : C.red;
+  if (metric === 'FID') return v < 100 ? C.green : v < 300 ? C.amber : C.red;
+  if (metric === 'CLS') return v < 0.1 ? C.green : v < 0.25 ? C.amber : C.red;
+  if (metric === 'TTI') return v < 3800 ? C.green : v < 7300 ? C.amber : C.red;
+  if (metric === 'DOM') return v < 2000 ? C.green : v < 4000 ? C.amber : C.red;
+  return C.text3;
+};
+const cwvLabel = (metric, v) => {
+  if (metric === 'LCP') return v < 2500 ? 'Bueno' : v < 4000 ? 'Mejorable' : 'Pobre';
+  if (metric === 'FID') return v < 100 ? 'Bueno' : v < 300 ? 'Mejorable' : 'Pobre';
+  if (metric === 'CLS') return v < 0.1 ? 'Bueno' : v < 0.25 ? 'Mejorable' : 'Pobre';
+  return v < 3800 ? 'Rápido' : v < 7300 ? 'Promedio' : 'Lento';
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sample data
+// ─────────────────────────────────────────────────────────────────────────────
+const sampleData = {
+  url: 'https://pizzeriadonmario.co/menu/domicilios',
+  status_code: 200,
+  health: {
+    onpage_score: 68,
+    computed_health_score: 64,
+    issues_count: 7,
+    passing_count: 18,
+    is_indexable: true,
+    http_status_class: '2xx',
+  },
+  issues: [
+    { check: 'meta_description_too_long', label: 'Meta descripción supera 160 caracteres', severity: 'critical' },
+    { check: 'missing_h1', label: 'La página no contiene un H1', severity: 'critical' },
+    { check: 'large_page_size', label: 'Tamaño total de página supera 2MB', severity: 'critical' },
+    { check: 'render_blocking_scripts', label: '3 scripts bloquean el renderizado inicial', severity: 'critical' },
+    { check: 'missing_alt_text', label: '14 imágenes sin atributo alt', severity: 'critical' },
+    { check: 'low_word_count', label: 'Contenido principal con menos de 300 palabras', severity: 'critical' },
+    { check: 'duplicate_title', label: 'Título duplicado en otra URL del sitio', severity: 'critical' },
+  ],
+  passing_checks: [
+    { check: 'https_enabled', label: 'Página servida con HTTPS' },
+    { check: 'mobile_friendly', label: 'Diseño responsive verificado' },
+    { check: 'canonical_present', label: 'Etiqueta canonical correcta' },
+    { check: 'robots_txt_found', label: 'robots.txt accesible' },
+    { check: 'sitemap_referenced', label: 'Sitemap referenciado en robots.txt' },
+    { check: 'meta_viewport', label: 'Meta viewport configurado' },
+    { check: 'lang_attribute', label: 'Atributo lang en <html>' },
+    { check: 'favicon_present', label: 'Favicon presente' },
+    { check: 'og_title', label: 'Open Graph title definido' },
+    { check: 'og_image', label: 'Open Graph image definido' },
+    { check: 'twitter_card', label: 'Twitter Card configurada' },
+    { check: 'structured_data', label: 'Schema.org Restaurant detectado' },
+    { check: 'no_mixed_content', label: 'Sin contenido mixto HTTP/HTTPS' },
+    { check: 'gzip_enabled', label: 'Compresión gzip activa' },
+    { check: 'no_broken_internal', label: 'Sin enlaces internos rotos' },
+    { check: 'image_format_modern', label: 'Imágenes en formatos modernos (WebP)' },
+    { check: 'has_description', label: 'Meta descripción presente' },
+    { check: 'utf8_encoding', label: 'Codificación UTF-8' },
+  ],
+  performance: {
+    time_to_interactive_ms: 4280,
+    dom_complete_ms: 2640,
+    largest_contentful_paint: 3120,
+    first_input_delay: 142,
+    cumulative_layout_shift: 0.18,
+    total_dom_size_bytes: 184_000,
+    page_size_bytes: 2_485_000,
+  },
+  resources_breakdown: {
+    scripts_count: 18, scripts_size: 612_000,
+    stylesheets_count: 6, stylesheets_size: 184_000,
+    images_count: 24, images_size: 1_540_000,
+    render_blocking_scripts_count: 3,
+  },
+  headings: {
+    h1: ['Pizzería Don Mario · Pizza artesanal a domicilio en Bogotá'],
+    h2: [
+      'Nuestras pizzas más pedidas',
+      'Zonas de cobertura en Bogotá',
+      'Cómo hacer tu pedido',
+      'Preguntas frecuentes',
+    ],
+    h3: [
+      'Pizza margherita',
+      'Pizza napolitana',
+      'Pizza prosciutto',
+      'Chapinero · Quinta Camacho',
+      'Usaquén · Zona Norte',
+      'Zona G',
+      '¿Tienen opción vegana?',
+      '¿Cuánto demora el domicilio?',
+    ],
+    h4: ['Ingredientes', 'Tamaños disponibles', 'Maridajes recomendados'],
+  },
+  headings_count: { h1: 1, h2: 4, h3: 8, h4: 3, h5: 0, h6: 0 },
+  content: {
+    plain_text_word_count: 287,
+    flesch_kincaid_readability_index: 64,
+    title_to_content_consistency: 0.82,
+    description_to_content_consistency: 0.71,
+  },
+  social_media_tags: {
+    'og:title': 'Pizzería Don Mario — Pizza artesanal a domicilio en Bogotá',
+    'og:description': 'Pizza de masa madre fermentada 48h, horno de leña y entrega en Chapinero, Usaquén y Zona G. Pide online en 30 minutos.',
+    'og:image': 'https://pizzeriadonmario.co/og-cover.jpg',
+    'og:url': 'https://pizzeriadonmario.co/menu/domicilios',
+    'og:type': 'restaurant',
+    'twitter:card': 'summary_large_image',
+    'twitter:title': 'Pizzería Don Mario · Pizza artesanal',
+    'twitter:description': 'Masa madre 48h y horno de leña. Domicilios en Bogotá.',
+    'twitter:image': 'https://pizzeriadonmario.co/twitter-cover.jpg',
+  },
+  title: 'Pizzería Don Mario · Pizza artesanal a domicilio en Bogotá',
+  description: 'Pide pizza artesanal hecha con masa madre y horno de leña. Domicilios en Chapinero, Usaquén, Quinta Camacho y Zona G. Entrega en menos de 30 minutos con seguimiento en tiempo real desde nuestra app.',
+  canonical: 'https://pizzeriadonmario.co/menu/domicilios',
+  duplicate_title: true,
+  duplicate_description: false,
+  resource_errors: [
+    { line: 142, column: 18, message: 'Failed to load resource: net::ERR_FAILED', status_code: 404 },
+    { line: 287, column: 12, message: 'Failed to load font woff2', status_code: 404 },
+    { line: 412, column: 8,  message: 'Mixed content blocked', status_code: 0 },
+  ],
+  resource_warnings: [
+    { line: 56,  column: 4,  message: 'Image without explicit width/height causes CLS', status_code: 200 },
+    { line: 178, column: 22, message: 'Render-blocking external stylesheet detected', status_code: 200 },
+    { line: 234, column: 9,  message: 'Inline script larger than 1KB — consider externalizing', status_code: 200 },
+    { line: 389, column: 14, message: 'Deprecated <meta http-equiv> usage', status_code: 200 },
+  ],
+  cost: 0.0028,
+  task_time: '1.84s',
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Icons
+// ─────────────────────────────────────────────────────────────────────────────
+const Icon = ({ size = 16, sw = 1.6, children, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+       strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, ...style }}>
+    {children}
+  </svg>
+);
+const IconCheck       = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 9.5"/></Icon>;
+const IconAlert       = (p) => <Icon {...p}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></Icon>;
+const IconX           = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>;
+const IconExternal    = (p) => <Icon {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></Icon>;
+const IconChevDown    = (p) => <Icon {...p}><polyline points="6 9 12 15 18 9"/></Icon>;
+const IconChevRight   = (p) => <Icon {...p}><polyline points="9 18 15 12 9 6"/></Icon>;
+const IconClock       = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>;
+const IconDollar      = (p) => <Icon {...p}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></Icon>;
+const IconInfo        = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></Icon>;
+const IconImg         = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></Icon>;
+const IconCode        = (p) => <Icon {...p}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></Icon>;
+const IconBrush       = (p) => <Icon {...p}><path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08"/><path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z"/></Icon>;
+const IconLayers      = (p) => <Icon {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></Icon>;
+const IconText        = (p) => <Icon {...p}><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></Icon>;
+const IconBug         = (p) => <Icon {...p}><rect x="8" y="6" width="8" height="14" rx="4"/><path d="m19 7-3 2"/><path d="m5 7 3 2"/><path d="m19 19-3-2"/><path d="m5 19 3-2"/><path d="M20 13h-4"/><path d="M4 13h4"/><path d="m10 4 1 2"/><path d="m14 4-1 2"/></Icon>;
+const IconWarn        = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></Icon>;
+const IconShield      = (p) => <Icon {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></Icon>;
+const IconGlobe       = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></Icon>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Formatting
+// ─────────────────────────────────────────────────────────────────────────────
+const fmtBytes = (n) => {
+  if (n == null) return '—';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 2).replace(/\.00$/, '') + ' MB';
+  if (n >= 1_000) return (n / 1_000).toFixed(n >= 10_000 ? 0 : 1).replace(/\.0$/, '') + ' KB';
+  return n + ' B';
+};
+const fmtMs = (n) => {
+  if (n == null) return '—';
+  if (n >= 1000) return (n / 1000).toFixed(2).replace(/\.?0+$/, '') + ' s';
+  return Math.round(n) + ' ms';
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Primitives
+// ─────────────────────────────────────────────────────────────────────────────
+function Card({ children, style, accent, ...rest }) {
+  return (
+    <div style={{
+      background: accent ? `linear-gradient(180deg, rgba(34,197,94,0.06), ${C.card})` : C.card,
+      border: `1px solid ${accent ? C.greenBorder : C.border}`,
+      borderRadius: 16,
+      ...style,
+    }} {...rest}>{children}</div>
+  );
+}
+
+function Badge({ children, tone = 'default', style, title }) {
+  const tones = {
+    default: { bg: 'rgba(255,255,255,0.06)', fg: C.text2, br: 'rgba(255,255,255,0.1)' },
+    green:   { bg: C.greenSoft, fg: C.green, br: C.greenBorder },
+    yellow:  { bg: 'rgba(251,191,36,0.14)', fg: C.yellow, br: 'rgba(251,191,36,0.32)' },
+    amber:   { bg: 'rgba(245,158,11,0.14)', fg: C.amber, br: 'rgba(245,158,11,0.32)' },
+    orange:  { bg: 'rgba(251,146,60,0.14)', fg: C.orange, br: 'rgba(251,146,60,0.32)' },
+    red:     { bg: 'rgba(239,68,68,0.14)', fg: C.red, br: 'rgba(239,68,68,0.32)' },
+    blue:    { bg: 'rgba(96,165,250,0.14)', fg: C.blue, br: 'rgba(96,165,250,0.32)' },
+  }[tone] || { bg: 'rgba(255,255,255,0.06)', fg: C.text2, br: 'rgba(255,255,255,0.1)' };
+  return (
+    <span title={title} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      background: tones.bg, color: tones.fg,
+      border: `1px solid ${tones.br}`,
+      fontSize: 11, fontWeight: 600,
+      padding: '2px 9px', borderRadius: 999,
+      letterSpacing: '0.01em',
+      whiteSpace: 'nowrap',
+      ...style,
+    }}>{children}</span>
+  );
+}
+
+function SectionTitle({ kicker, title, sub, right }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, gap: 16, flexWrap: 'wrap' }}>
+      <div>
+        {kicker && <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 17, marginBottom: 4 }}>{kicker}</div>}
+        <h2 style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 22, color: C.text, letterSpacing: '-0.015em' }}>{title}</h2>
+        {sub && <p style={{ fontSize: 13, color: C.text3, marginTop: 4 }}>{sub}</p>}
+      </div>
+      {right}
+    </div>
+  );
+}
+
+function Tooltip({ children, content, width = 240 }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex' }}
+      onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      {children}
+      {open && (
+        <span style={{
+          position: 'absolute', bottom: 'calc(100% + 8px)', left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(20,20,20,0.97)',
+          border: `1px solid ${C.borderStrong}`,
+          color: C.text2, fontSize: 11.5, padding: '8px 12px',
+          borderRadius: 8, lineHeight: 1.5,
+          pointerEvents: 'none', zIndex: 10, width,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          fontFamily: 'Inter', fontWeight: 400,
+          whiteSpace: 'normal',
+        }}>{content}</span>
+      )}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hero: URL + radial score + KPIs
+// ─────────────────────────────────────────────────────────────────────────────
+function RadialScore({ score, size = 200, stroke = 18, label }) {
+  const color = scoreColor(score);
+  const r = (size - stroke) / 2;
+  const cx = size / 2, cy = size / 2;
+  const circ = 2 * Math.PI * r;
+  const startAngle = 135; // degrees
+  const sweep = 270;      // degrees
+  const dashArr = `${(sweep / 360) * circ} ${circ}`;
+  const dashOff = (1 - score / 100) * (sweep / 360) * circ;
+
+  return (
+    <div style={{ position: 'relative', width: size, height: size }}>
+      <svg width={size} height={size} style={{ transform: `rotate(${startAngle}deg)`, display: 'block' }}>
+        <defs>
+          <linearGradient id="rad-grad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor={color}/>
+            <stop offset="100%" stopColor={color} stopOpacity="0.6"/>
+          </linearGradient>
+          <filter id="rad-glow">
+            <feGaussianBlur stdDeviation="3" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        {/* Track */}
+        <circle cx={cx} cy={cy} r={r} fill="none"
+          stroke="rgba(255,255,255,0.06)" strokeWidth={stroke}
+          strokeDasharray={`${(sweep / 360) * circ} ${circ}`} strokeLinecap="round"/>
+        {/* Progress */}
+        <circle cx={cx} cy={cy} r={r} fill="none"
+          stroke="url(#rad-grad)" strokeWidth={stroke}
+          strokeDasharray={dashArr} strokeDashoffset={dashOff}
+          strokeLinecap="round" filter="url(#rad-glow)"
+          style={{ transition: 'stroke-dashoffset 0.8s cubic-bezier(0.2, 0.9, 0.3, 1)' }}/>
+      </svg>
+      <div style={{
+        position: 'absolute', inset: 0,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        pointerEvents: 'none',
+      }}>
+        <div style={{
+          fontFamily: 'Syne', fontWeight: 800, fontSize: 56,
+          color: color, lineHeight: 1, letterSpacing: '-0.04em',
+        }}>{score}</div>
+        <div style={{ fontSize: 12, color: C.text3, fontWeight: 500, marginTop: 4 }}>/ 100</div>
+        <div style={{
+          fontFamily: 'Inter', fontSize: 12, fontWeight: 600,
+          color: color, marginTop: 8,
+          letterSpacing: '0.04em', textTransform: 'uppercase',
+        }}>{label || scoreLabel(score)}</div>
+      </div>
+    </div>
+  );
+}
+
+function HeroCard({ data }) {
+  const { health } = data;
+  const color = scoreColor(health.computed_health_score);
+
+  return (
+    <Card style={{ padding: 28, position: 'relative', overflow: 'hidden' }}>
+      <div style={{
+        position: 'absolute', top: -100, right: -100,
+        width: 320, height: 320,
+        background: `radial-gradient(circle, ${color}22, transparent 70%)`,
+        pointerEvents: 'none',
+      }}/>
+
+      <div className="hero-grid" style={{
+        display: 'grid', gridTemplateColumns: '1.2fr auto 1fr',
+        gap: 32, alignItems: 'center', position: 'relative',
+      }}>
+        {/* Left: URL info */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 18 }}>Auditoría On-Page</div>
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.text4 }}/>
+            <div style={{ fontSize: 12, color: C.text3 }}>Salud técnica de la página</div>
+          </div>
+          <h1 style={{
+            fontFamily: 'Syne, sans-serif', fontWeight: 800,
+            fontSize: 'clamp(20px, 2.6vw, 30px)', lineHeight: 1.15,
+            color: C.text, letterSpacing: '-0.02em',
+            marginBottom: 12, wordBreak: 'break-all',
+          }}>
+            <span style={{ color: C.text3 }}>{data.url.split('://')[0]}://</span>
+            {data.url.split('://')[1]}
+          </h1>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+            <Badge tone={health.http_status_class === '2xx' ? 'green' : 'red'}>
+              <IconGlobe size={11}/> HTTP {data.status_code}
+            </Badge>
+            {data.canonical && (
+              <Badge tone="default">
+                <IconShield size={11}/> Canonical
+              </Badge>
+            )}
+            <Badge tone="default">
+              <IconLayers size={11}/> OnPage score {health.onpage_score}
+            </Badge>
+          </div>
+          <a href={data.url} target="_blank" rel="noreferrer" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.04)',
+            border: `1px solid ${C.border}`,
+            color: C.text2, fontSize: 13, fontWeight: 500,
+            padding: '8px 14px', borderRadius: 9,
+            textDecoration: 'none', transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = C.borderStrong; e.currentTarget.style.color = C.text; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.color = C.text2; }}>
+            Abrir página <IconExternal size={12}/>
+          </a>
+        </div>
+
+        {/* Center: radial */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          <RadialScore score={health.computed_health_score}/>
+          <div style={{
+            fontSize: 11, color: C.text3, letterSpacing: '0.06em',
+            textTransform: 'uppercase', fontWeight: 600,
+          }}>Health Score</div>
+        </div>
+
+        {/* Right: KPIs */}
+        <div className="hero-kpis" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <HeroKpi
+            icon={<IconAlert size={18}/>} iconColor={C.red}
+            label="Issues encontrados"
+            value={health.issues_count}
+            sub={`${health.issues_count} críticos detectados`}
+            tone="red"
+          />
+          <HeroKpi
+            icon={<IconCheck size={18}/>} iconColor={C.green}
+            label="Checks aprobados"
+            value={health.passing_count}
+            sub={`${Math.round((health.passing_count / (health.passing_count + health.issues_count)) * 100)}% de las pruebas`}
+            tone="green"
+          />
+          <HeroKpi
+            icon={health.is_indexable ? <IconCheck size={18}/> : <IconX size={18}/>}
+            iconColor={health.is_indexable ? C.green : C.red}
+            label="Indexable"
+            value={health.is_indexable ? 'Sí' : 'No'}
+            sub={health.is_indexable ? 'Google puede indexar esta URL' : 'noindex bloquea la indexación'}
+            tone={health.is_indexable ? 'green' : 'red'}
+          />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function HeroKpi({ icon, iconColor, label, value, sub, tone }) {
+  const tones = {
+    red:   { bg: 'rgba(239,68,68,0.08)', br: 'rgba(239,68,68,0.25)' },
+    green: { bg: C.greenSoft, br: C.greenBorder },
+  }[tone] || { bg: 'rgba(255,255,255,0.025)', br: C.border };
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 14,
+      padding: '12px 14px', borderRadius: 12,
+      background: tones.bg, border: `1px solid ${tones.br}`,
+    }}>
+      <div style={{
+        width: 38, height: 38, borderRadius: 10,
+        background: 'rgba(0,0,0,0.3)',
+        color: iconColor,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        border: `1px solid ${iconColor}40`,
+      }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontSize: 10.5, color: C.text3, letterSpacing: '0.06em',
+          textTransform: 'uppercase', fontWeight: 600, marginBottom: 2,
+        }}>{label}</div>
+        <div style={{
+          fontFamily: 'Syne', fontWeight: 800, fontSize: 22, color: iconColor,
+          lineHeight: 1.1,
+        }}>{value}</div>
+        <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{sub}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HTTP status donut
+// ─────────────────────────────────────────────────────────────────────────────
+function HttpStatusDonut({ statusCode, statusClass }) {
+  const classes = [
+    { key: '2xx', label: 'OK',          color: C.green },
+    { key: '3xx', label: 'Redirect',    color: C.blue },
+    { key: '4xx', label: 'Client error', color: C.amber },
+    { key: '5xx', label: 'Server error', color: C.red },
+  ];
+  const size = 110, stroke = 14, r = (size - stroke) / 2;
+  const cx = size / 2, cy = size / 2;
+  const circ = 2 * Math.PI * r;
+  const each = circ / 4;
+  const gap = 4;
+
+  const activeColor = classes.find(c => c.key === statusClass)?.color || C.text3;
+
+  return (
+    <Card style={{ padding: 24, height: '100%' }}>
+      <SectionTitle title="Estado HTTP" sub="Clase de respuesta del servidor"/>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+        <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+          <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+            {classes.map((cls, i) => {
+              const isActive = cls.key === statusClass;
+              return (
+                <circle key={cls.key}
+                  cx={cx} cy={cy} r={r} fill="none"
+                  stroke={isActive ? cls.color : 'rgba(255,255,255,0.06)'}
+                  strokeWidth={stroke}
+                  strokeDasharray={`${each - gap} ${circ - (each - gap)}`}
+                  strokeDashoffset={-i * each}
+                  strokeLinecap="round"
+                  style={{
+                    filter: isActive ? `drop-shadow(0 0 6px ${cls.color}66)` : 'none',
+                    transition: 'stroke 0.4s',
+                  }}/>
+              );
+            })}
+          </svg>
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            pointerEvents: 'none',
+          }}>
+            <div style={{
+              fontFamily: 'Syne', fontWeight: 800, fontSize: 22, color: activeColor, lineHeight: 1,
+            }}>{statusCode}</div>
+            <div style={{ fontSize: 10, color: C.text3, fontWeight: 500, marginTop: 2, letterSpacing: '0.04em' }}>
+              {statusClass}
+            </div>
+          </div>
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {classes.map(cls => {
+            const isActive = cls.key === statusClass;
+            return (
+              <div key={cls.key} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '4px 8px', borderRadius: 6,
+                background: isActive ? `${cls.color}15` : 'transparent',
+                border: `1px solid ${isActive ? `${cls.color}40` : 'transparent'}`,
+                opacity: isActive ? 1 : 0.5,
+              }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: cls.color }}/>
+                <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: C.text, fontWeight: 600 }}>
+                  {cls.key}
+                </span>
+                <span style={{ fontSize: 12, color: C.text2, flex: 1 }}>{cls.label}</span>
+                {isActive && <IconCheck size={13} style={{ color: cls.color }}/>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Issues / Passing checks (two-column)
+// ─────────────────────────────────────────────────────────────────────────────
+function IssuesCard({ issues }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? issues : issues.slice(0, 5);
+
+  return (
+    <Card style={{ padding: 24, height: '100%' }}>
+      <SectionTitle
+        title="Issues críticos"
+        sub="Problemas que afectan tu posicionamiento en Google"
+        right={<Badge tone="red" style={{ fontSize: 12, padding: '4px 10px' }}>{issues.length} críticos</Badge>}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {visible.map((issue, i) => (
+          <div key={issue.check} style={{
+            display: 'flex', alignItems: 'flex-start', gap: 12,
+            padding: '12px 14px', borderRadius: 10,
+            background: 'rgba(239,68,68,0.05)',
+            border: '1px solid rgba(239,68,68,0.18)',
+          }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 8,
+              background: 'rgba(239,68,68,0.15)',
+              border: '1px solid rgba(239,68,68,0.35)',
+              color: C.red, flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <IconAlert size={14}/>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, color: C.text, fontWeight: 500, lineHeight: 1.4 }}>
+                {issue.label}
+              </div>
+              <div style={{
+                fontSize: 10.5, color: C.text3, marginTop: 3,
+                fontFamily: 'JetBrains Mono, monospace',
+              }}>{issue.check}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {issues.length > 5 && (
+        <button onClick={() => setExpanded(e => !e)} style={{
+          marginTop: 12, width: '100%',
+          padding: '10px 14px', borderRadius: 9,
+          background: 'rgba(255,255,255,0.03)',
+          border: `1px solid ${C.border}`,
+          color: C.text2, fontSize: 12.5, fontWeight: 500,
+          cursor: 'pointer', display: 'inline-flex',
+          alignItems: 'center', justifyContent: 'center', gap: 6,
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = C.text; }}
+        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.color = C.text2; }}>
+          {expanded ? 'Mostrar solo los primeros 5' : `Ver todos (${issues.length})`}
+          <IconChevDown size={12} style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}/>
+        </button>
+      )}
+    </Card>
+  );
+}
+
+function PassingChecksCard({ checks }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? checks : checks.slice(0, 8);
+
+  return (
+    <Card style={{ padding: 24, height: '100%' }}>
+      <SectionTitle
+        title="Checks aprobados"
+        sub="Lo que estás haciendo bien"
+        right={<Badge tone="green" style={{ fontSize: 12, padding: '4px 10px' }}>{checks.length} aprobados</Badge>}
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {visible.map(check => (
+          <div key={check.check} style={{
+            display: 'flex', alignItems: 'center', gap: 12,
+            padding: '8px 12px', borderRadius: 9,
+            background: 'rgba(34,197,94,0.04)',
+            border: `1px solid rgba(34,197,94,0.12)`,
+          }}>
+            <IconCheck size={16} style={{ color: C.green, flexShrink: 0 }}/>
+            <span style={{ fontSize: 13, color: C.text, fontWeight: 500, flex: 1 }}>{check.label}</span>
+          </div>
+        ))}
+      </div>
+      {checks.length > 8 && (
+        <button onClick={() => setExpanded(e => !e)} style={{
+          marginTop: 12, width: '100%',
+          padding: '10px 14px', borderRadius: 9,
+          background: 'rgba(255,255,255,0.03)',
+          border: `1px solid ${C.border}`,
+          color: C.text2, fontSize: 12.5, fontWeight: 500,
+          cursor: 'pointer', display: 'inline-flex',
+          alignItems: 'center', justifyContent: 'center', gap: 6,
+        }}>
+          {expanded ? 'Mostrar solo los primeros 8' : `Ver todos (${checks.length})`}
+          <IconChevDown size={12} style={{ transform: expanded ? 'rotate(180deg)' : 'none' }}/>
+        </button>
+      )}
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Performance gauges
+// ─────────────────────────────────────────────────────────────────────────────
+function Gauge({ metric, value, label, format, ranges }) {
+  // ranges: [good, poor] thresholds
+  const color = cwvColor(metric, value);
+  const cwLabel = cwvLabel(metric, value);
+
+  // Map value to 0..100 for the arc (poor = full, capped)
+  const pct = Math.min(100, Math.max(0, (value / ranges[1]) * 100));
+
+  const size = 130, stroke = 12, r = (size - stroke) / 2;
+  const cx = size / 2, cy = size / 2;
+  const circ = 2 * Math.PI * r;
+  const sweep = 270; // degrees visible
+  const dashArr = `${(sweep / 360) * circ} ${circ}`;
+  const dashOff = (1 - pct / 100) * (sweep / 360) * circ;
+
+  return (
+    <Card style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+      <div style={{
+        fontSize: 11, color: C.text3, letterSpacing: '0.06em',
+        textTransform: 'uppercase', fontWeight: 600,
+      }}>{label}</div>
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(135deg)' }}>
+          <circle cx={cx} cy={cy} r={r} fill="none"
+            stroke="rgba(255,255,255,0.06)" strokeWidth={stroke}
+            strokeDasharray={`${(sweep / 360) * circ} ${circ}`} strokeLinecap="round"/>
+          <circle cx={cx} cy={cy} r={r} fill="none"
+            stroke={color} strokeWidth={stroke}
+            strokeDasharray={dashArr} strokeDashoffset={dashOff}
+            strokeLinecap="round"
+            style={{
+              filter: `drop-shadow(0 0 6px ${color}66)`,
+              transition: 'stroke-dashoffset 0.8s cubic-bezier(0.2, 0.9, 0.3, 1)',
+            }}/>
+        </svg>
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            fontFamily: 'Syne', fontWeight: 800, fontSize: 22,
+            color: color, lineHeight: 1, letterSpacing: '-0.02em',
+          }}>{format(value)}</div>
+          <div style={{ fontSize: 10, color: color, fontWeight: 600, marginTop: 4, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            {cwLabel}
+          </div>
+        </div>
+      </div>
+      <div style={{ fontSize: 10.5, color: C.text3, fontFamily: 'JetBrains Mono, monospace' }}>
+        umbral &lt; {format(ranges[0])}
+      </div>
+    </Card>
+  );
+}
+
+function PerformanceGauges({ perf }) {
+  return (
+    <div>
+      <SectionTitle
+        kicker="Rendimiento"
+        title="Core Web Vitals"
+        sub="Métricas de Google que afectan ranking y experiencia de usuario"
+      />
+      <div className="perf-grid" style={{
+        display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14,
+      }}>
+        <Gauge metric="TTI" label="Time to Interactive" value={perf.time_to_interactive_ms} format={fmtMs} ranges={[3800, 7300]}/>
+        <Gauge metric="DOM" label="DOM Complete"        value={perf.dom_complete_ms}       format={fmtMs} ranges={[2000, 4000]}/>
+        <Gauge metric="LCP" label="Largest Contentful Paint" value={perf.largest_contentful_paint} format={fmtMs} ranges={[2500, 4000]}/>
+        <Gauge metric="FID" label="First Input Delay"   value={perf.first_input_delay}      format={fmtMs} ranges={[100, 300]}/>
+      </div>
+      {/* CLS as a horizontal item below */}
+      <Card style={{ marginTop: 14, padding: '16px 22px', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{
+          width: 38, height: 38, borderRadius: 10,
+          background: `${cwvColor('CLS', perf.cumulative_layout_shift)}22`,
+          border: `1px solid ${cwvColor('CLS', perf.cumulative_layout_shift)}55`,
+          color: cwvColor('CLS', perf.cumulative_layout_shift),
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}><IconLayers size={18}/></div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, color: C.text3, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 3 }}>
+            Cumulative Layout Shift (CLS)
+          </div>
+          <div style={{ fontSize: 13, color: C.text2 }}>
+            Mide cuánto se desplaza visualmente el contenido durante la carga
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{
+            fontFamily: 'Syne', fontWeight: 800, fontSize: 28,
+            color: cwvColor('CLS', perf.cumulative_layout_shift),
+            lineHeight: 1,
+          }}>{perf.cumulative_layout_shift.toFixed(2)}</div>
+          <Badge tone={cwvColor('CLS', perf.cumulative_layout_shift) === C.green ? 'green' : cwvColor('CLS', perf.cumulative_layout_shift) === C.amber ? 'amber' : 'red'} style={{ marginTop: 6 }}>
+            {cwvLabel('CLS', perf.cumulative_layout_shift)}
+          </Badge>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resources stacked bar
+// ─────────────────────────────────────────────────────────────────────────────
+function ResourcesBar({ rb, pageSize }) {
+  const segs = [
+    { key: 'scripts',     label: 'Scripts',     count: rb.scripts_count,     size: rb.scripts_size,     color: C.amber, icon: <IconCode size={13}/> },
+    { key: 'stylesheets', label: 'Stylesheets', count: rb.stylesheets_count, size: rb.stylesheets_size, color: C.purple, icon: <IconBrush size={13}/> },
+    { key: 'images',      label: 'Imágenes',    count: rb.images_count,      size: rb.images_size,      color: C.blue, icon: <IconImg size={13}/> },
+  ];
+  const known = segs.reduce((s, x) => s + x.size, 0);
+  const other = Math.max(0, pageSize - known);
+  if (other > 0) segs.push({ key: 'other', label: 'Otros', count: null, size: other, color: 'rgba(255,255,255,0.18)', icon: <IconLayers size={13}/> });
+  const total = segs.reduce((s, x) => s + x.size, 0);
+
+  return (
+    <Card style={{ padding: 24 }}>
+      <SectionTitle
+        kicker="Recursos"
+        title="Peso de la página"
+        sub={`Total ${fmtBytes(pageSize)} — desglose por tipo de recurso`}
+        right={
+          <Badge tone={pageSize > 2_000_000 ? 'red' : pageSize > 1_000_000 ? 'amber' : 'green'}>
+            {pageSize > 2_000_000 ? 'Pesada' : pageSize > 1_000_000 ? 'Moderada' : 'Ligera'}
+          </Badge>
+        }
+      />
+
+      {/* Stacked bar */}
+      <div style={{
+        display: 'flex', width: '100%', height: 40,
+        borderRadius: 10, overflow: 'hidden',
+        border: `1px solid ${C.border}`, marginBottom: 18,
+      }}>
+        {segs.map((s, i) => {
+          const pct = (s.size / total) * 100;
+          if (pct < 0.5) return null;
+          return (
+            <div key={s.key} title={`${s.label}: ${fmtBytes(s.size)} (${pct.toFixed(1)}%)`}
+              style={{
+                width: `${pct}%`,
+                background: s.color === 'rgba(255,255,255,0.18)'
+                  ? s.color : `linear-gradient(180deg, ${s.color}, ${s.color}cc)`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: s.color === 'rgba(255,255,255,0.18)' ? C.text : C.bg,
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 12,
+                borderRight: i < segs.length - 1 ? '1px solid rgba(0,0,0,0.2)' : 'none',
+                whiteSpace: 'nowrap',
+              }}>
+              {pct >= 7 ? `${pct.toFixed(0)}%` : ''}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend with detail */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+        {segs.map(s => (
+          <div key={s.key} style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '10px 12px', borderRadius: 10,
+            background: 'rgba(255,255,255,0.02)',
+            border: `1px solid ${C.border}`,
+          }}>
+            <div style={{
+              width: 30, height: 30, borderRadius: 8,
+              background: s.color === 'rgba(255,255,255,0.18)' ? 'rgba(255,255,255,0.06)' : `${s.color}22`,
+              color: s.color === 'rgba(255,255,255,0.18)' ? C.text3 : s.color,
+              border: `1px solid ${s.color === 'rgba(255,255,255,0.18)' ? C.border : `${s.color}55`}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>{s.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+                <span style={{ fontSize: 12.5, color: C.text, fontWeight: 600 }}>{s.label}</span>
+                {s.count != null && <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 10.5, color: C.text3 }}>×{s.count}</span>}
+              </div>
+              <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: C.text2, marginTop: 2 }}>
+                {fmtBytes(s.size)}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {rb.render_blocking_scripts_count > 0 && (
+        <div style={{
+          marginTop: 14, padding: '10px 14px', borderRadius: 9,
+          background: 'rgba(245,158,11,0.08)',
+          border: '1px solid rgba(245,158,11,0.25)',
+          color: C.amber, fontSize: 12.5,
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+        }}>
+          <IconWarn size={14}/>
+          <strong style={{ fontWeight: 600 }}>{rb.render_blocking_scripts_count} scripts</strong>
+          <span style={{ color: 'rgba(245,158,11,0.85)' }}>bloquean el renderizado inicial</span>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Headings hierarchy
+// ─────────────────────────────────────────────────────────────────────────────
+function HeadingsHierarchy({ headings, headingsCount }) {
+  const sizes = { h1: 22, h2: 17, h3: 14, h4: 12 };
+  const indents = { h1: 0, h2: 20, h3: 40, h4: 60 };
+  const tones = { h1: C.green, h2: C.text, h3: C.text2, h4: C.text3 };
+
+  const rows = [];
+  ['h1', 'h2', 'h3', 'h4'].forEach(level => {
+    (headings[level] || []).forEach((text, i) => {
+      rows.push({ level, text });
+    });
+  });
+
+  return (
+    <Card style={{ padding: 24, height: '100%' }}>
+      <SectionTitle
+        title="Jerarquía de headings"
+        sub="Estructura semántica de la página"
+        right={
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].map(l => (
+              <Badge key={l} tone={headingsCount[l] === 0 ? 'default' : l === 'h1' && headingsCount[l] !== 1 ? 'red' : 'default'}
+                style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                {l.toUpperCase()} {headingsCount[l]}
+              </Badge>
+            ))}
+          </div>
+        }
+      />
+
+      {headingsCount.h1 === 0 && (
+        <div style={{
+          marginBottom: 14, padding: '10px 14px', borderRadius: 9,
+          background: 'rgba(239,68,68,0.08)',
+          border: '1px solid rgba(239,68,68,0.25)',
+          color: C.red, fontSize: 12.5,
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+        }}>
+          <IconAlert size={14}/>
+          La página no contiene H1 — Google necesita al menos uno
+        </div>
+      )}
+      {headingsCount.h1 > 1 && (
+        <div style={{
+          marginBottom: 14, padding: '10px 14px', borderRadius: 9,
+          background: 'rgba(245,158,11,0.08)',
+          border: '1px solid rgba(245,158,11,0.25)',
+          color: C.amber, fontSize: 12.5,
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+        }}>
+          <IconWarn size={14}/>
+          Múltiples H1 detectados — usar solo uno por página
+        </div>
+      )}
+
+      <div style={{
+        background: 'rgba(0,0,0,0.25)',
+        border: `1px solid ${C.border}`,
+        borderRadius: 12, padding: 16,
+        fontFamily: 'Inter',
+      }}>
+        {rows.length === 0 ? (
+          <div style={{ color: C.text3, fontSize: 13, textAlign: 'center', padding: 24 }}>
+            No se detectaron headings.
+          </div>
+        ) : rows.map((row, i) => (
+          <div key={i} style={{
+            position: 'relative',
+            paddingLeft: indents[row.level],
+            marginBottom: 8,
+          }}>
+            {row.level !== 'h1' && (
+              <div style={{
+                position: 'absolute', left: indents[row.level] - 12, top: 0, bottom: '50%',
+                width: 1, background: 'rgba(255,255,255,0.1)',
+              }}/>
+            )}
+            {row.level !== 'h1' && (
+              <div style={{
+                position: 'absolute', left: indents[row.level] - 12, top: '50%',
+                width: 8, height: 1, background: 'rgba(255,255,255,0.1)',
+              }}/>
+            )}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+              <span style={{
+                fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+                color: tones[row.level], fontWeight: 700,
+                background: row.level === 'h1' ? C.greenSoft : 'rgba(255,255,255,0.04)',
+                border: row.level === 'h1' ? `1px solid ${C.greenBorder}` : `1px solid ${C.border}`,
+                padding: '1px 5px', borderRadius: 4,
+                flexShrink: 0,
+              }}>{row.level.toUpperCase()}</span>
+              <span style={{
+                fontFamily: row.level === 'h1' ? 'Syne' : 'Inter',
+                fontSize: sizes[row.level],
+                fontWeight: row.level === 'h1' ? 700 : row.level === 'h2' ? 600 : 500,
+                color: tones[row.level],
+                letterSpacing: row.level === 'h1' ? '-0.015em' : 0,
+                lineHeight: 1.3,
+              }}>{row.text}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Content metrics
+// ─────────────────────────────────────────────────────────────────────────────
+function ContentMetrics({ content }) {
+  const readability = content.flesch_kincaid_readability_index;
+  const readColor = readability >= 60 ? C.green : readability >= 30 ? C.amber : C.red;
+  const readLabel = readability >= 90 ? 'Muy fácil' : readability >= 60 ? 'Plain English' : readability >= 30 ? 'Difícil' : 'Muy difícil';
+
+  return (
+    <Card style={{ padding: 24, height: '100%' }}>
+      <SectionTitle title="Contenido" sub="Análisis lingüístico y de consistencia"/>
+
+      {/* Word count */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+        <div style={{
+          width: 40, height: 40, borderRadius: 10,
+          background: content.plain_text_word_count < 300 ? 'rgba(239,68,68,0.15)' : C.greenSoft,
+          border: `1px solid ${content.plain_text_word_count < 300 ? 'rgba(239,68,68,0.35)' : C.greenBorder}`,
+          color: content.plain_text_word_count < 300 ? C.red : C.green,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}><IconText size={18}/></div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, color: C.text3, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+            Palabras
+          </div>
+          <div style={{
+            fontFamily: 'Syne', fontWeight: 800, fontSize: 28,
+            color: content.plain_text_word_count < 300 ? C.red : C.text,
+            lineHeight: 1.1,
+          }}>{content.plain_text_word_count}</div>
+        </div>
+        {content.plain_text_word_count < 300 && (
+          <Badge tone="red"><IconWarn size={11}/> Bajo</Badge>
+        )}
+      </div>
+
+      {/* Readability */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 13, color: C.text2, fontWeight: 500 }}>Legibilidad (Flesch-Kincaid)</span>
+            <Tooltip content="Escala 0-100. 0-30 muy difícil, 60-70 plain English, 90-100 muy fácil. Google recomienda 60+ para audiencias generales." width={260}>
+              <span style={{ color: C.text4, display: 'inline-flex', cursor: 'help' }}><IconInfo size={12}/></span>
+            </Tooltip>
+          </div>
+          <span style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 14,
+            color: readColor, fontWeight: 600,
+          }}>{readability}</span>
+        </div>
+        <div style={{
+          height: 8, borderRadius: 999,
+          background: 'rgba(255,255,255,0.05)', overflow: 'hidden',
+          position: 'relative',
+        }}>
+          {/* Range markers at 30 and 60 */}
+          <div style={{
+            position: 'absolute', left: '30%', top: 0, bottom: 0, width: 1,
+            background: 'rgba(255,255,255,0.15)',
+          }}/>
+          <div style={{
+            position: 'absolute', left: '60%', top: 0, bottom: 0, width: 1,
+            background: 'rgba(255,255,255,0.15)',
+          }}/>
+          <div style={{
+            width: `${readability}%`, height: '100%',
+            background: `linear-gradient(90deg, ${readColor}cc, ${readColor})`,
+            borderRadius: 999,
+            boxShadow: `0 0 12px ${readColor}40`,
+          }}/>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10, color: C.text3, fontFamily: 'JetBrains Mono, monospace' }}>
+          <span>Difícil</span>
+          <span>Plain English</span>
+          <span>Muy fácil</span>
+        </div>
+        <div style={{
+          marginTop: 10, fontSize: 12, color: readColor, fontWeight: 600,
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          {readLabel}
+        </div>
+      </div>
+
+      {/* Consistency bars */}
+      <ConsistencyBar
+        label="Consistencia título ↔ contenido"
+        value={content.title_to_content_consistency}
+        tooltip="Mide cuánto el contenido refleja el título de la página"
+      />
+      <ConsistencyBar
+        label="Consistencia descripción ↔ contenido"
+        value={content.description_to_content_consistency}
+        tooltip="Mide cuánto el contenido refleja la meta descripción"
+      />
+    </Card>
+  );
+}
+
+function ConsistencyBar({ label, value, tooltip }) {
+  const pct = Math.round(value * 100);
+  const color = pct >= 70 ? C.green : pct >= 40 ? C.amber : C.red;
+  return (
+    <div style={{ marginTop: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 12.5, color: C.text2, fontWeight: 500 }}>{label}</span>
+          {tooltip && (
+            <Tooltip content={tooltip}>
+              <span style={{ color: C.text4, display: 'inline-flex', cursor: 'help' }}><IconInfo size={11}/></span>
+            </Tooltip>
+          )}
+        </div>
+        <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: color, fontWeight: 600 }}>
+          {pct}%
+        </span>
+      </div>
+      <div style={{
+        height: 6, borderRadius: 999,
+        background: 'rgba(255,255,255,0.05)', overflow: 'hidden',
+      }}>
+        <div style={{
+          width: `${pct}%`, height: '100%',
+          background: `linear-gradient(90deg, ${color}cc, ${color})`,
+          borderRadius: 999,
+          transition: 'width 0.6s cubic-bezier(0.2, 0.9, 0.3, 1)',
+        }}/>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Resource errors / warnings (accordion)
+// ─────────────────────────────────────────────────────────────────────────────
+function AccordionSection({ title, count, icon, color, items, defaultOpen = false }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.02)',
+      border: `1px solid ${C.border}`,
+      borderRadius: 12, overflow: 'hidden',
+    }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 18px',
+        background: open ? `${color}10` : 'transparent',
+        border: 'none', cursor: 'pointer', textAlign: 'left',
+        color: C.text, transition: 'all 0.15s',
+      }}>
+        <div style={{
+          width: 30, height: 30, borderRadius: 8,
+          background: `${color}22`,
+          border: `1px solid ${color}55`,
+          color, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>{icon}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{title}</div>
+          <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>
+            {count === 0 ? 'Sin problemas detectados' : `${count} encontrado${count === 1 ? '' : 's'}`}
+          </div>
+        </div>
+        <Badge tone={count === 0 ? 'green' : color === C.red ? 'red' : 'amber'}>{count}</Badge>
+        <span style={{ color: C.text3, display: 'inline-flex', transition: 'transform 0.2s', transform: open ? 'rotate(90deg)' : 'none' }}>
+          <IconChevRight size={16}/>
+        </span>
+      </button>
+      {open && items.length > 0 && (
+        <div style={{ borderTop: `1px solid ${C.border}` }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{
+                  padding: '10px 18px', fontSize: 10.5, fontWeight: 600,
+                  color: C.text3, letterSpacing: '0.07em', textTransform: 'uppercase',
+                  textAlign: 'left', width: 110,
+                  borderBottom: `1px solid ${C.border}`,
+                }}>Línea : Col</th>
+                <th style={{
+                  padding: '10px 18px', fontSize: 10.5, fontWeight: 600,
+                  color: C.text3, letterSpacing: '0.07em', textTransform: 'uppercase',
+                  textAlign: 'left',
+                  borderBottom: `1px solid ${C.border}`,
+                }}>Mensaje</th>
+                <th style={{
+                  padding: '10px 18px', fontSize: 10.5, fontWeight: 600,
+                  color: C.text3, letterSpacing: '0.07em', textTransform: 'uppercase',
+                  textAlign: 'right', width: 90,
+                  borderBottom: `1px solid ${C.border}`,
+                }}>HTTP</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((it, i) => (
+                <tr key={i}>
+                  <td style={{
+                    padding: '11px 18px', borderBottom: i < items.length - 1 ? `1px solid ${C.border}` : 'none',
+                    fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: C.text2,
+                  }}>{it.line}:{it.column}</td>
+                  <td style={{
+                    padding: '11px 18px', borderBottom: i < items.length - 1 ? `1px solid ${C.border}` : 'none',
+                    fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: C.text, lineHeight: 1.4,
+                  }}>{it.message}</td>
+                  <td style={{
+                    padding: '11px 18px', borderBottom: i < items.length - 1 ? `1px solid ${C.border}` : 'none',
+                    textAlign: 'right',
+                  }}>
+                    <Badge tone={it.status_code >= 400 ? 'red' : it.status_code >= 300 ? 'amber' : it.status_code === 0 ? 'red' : 'default'} style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+                      {it.status_code || 'N/A'}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ResourceErrorsCard({ errors, warnings }) {
+  return (
+    <Card style={{ padding: 24 }}>
+      <SectionTitle
+        kicker="Consola"
+        title="Errores y advertencias de recursos"
+        sub="Problemas detectados al cargar recursos de la página"
+      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <AccordionSection
+          title="Errores" count={errors.length} items={errors}
+          icon={<IconBug size={15}/>} color={C.red} defaultOpen
+        />
+        <AccordionSection
+          title="Advertencias" count={warnings.length} items={warnings}
+          icon={<IconWarn size={15}/>} color={C.amber}
+        />
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Social media preview cards (Open Graph + Twitter)
+// ─────────────────────────────────────────────────────────────────────────────
+function FacebookCard({ tags, url }) {
+  const title = tags['og:title'] || '—';
+  const desc = tags['og:description'] || '—';
+  const image = tags['og:image'];
+  const domain = url ? new URL(url).hostname : '';
+
+  return (
+    <Card style={{ padding: 0, overflow: 'hidden', background: 'rgba(255,255,255,0.025)' }}>
+      <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <FacebookLogo/>
+        <div>
+          <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>Facebook · LinkedIn</div>
+          <div style={{ fontSize: 11, color: C.text3 }}>Open Graph preview</div>
+        </div>
+      </div>
+      <div style={{ padding: 16, background: '#f0f2f5' }}>
+        {/* Faux FB post chrome */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#1877f2', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Syne', fontWeight: 700, fontSize: 14 }}>P</div>
+          <div>
+            <div style={{ fontSize: 12, color: '#050505', fontWeight: 600 }}>Pizzería Don Mario</div>
+            <div style={{ fontSize: 10.5, color: '#65676b' }}>Patrocinado · 🌐</div>
+          </div>
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #ced0d4', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{
+            height: 168, background: image
+              ? `linear-gradient(135deg, ${C.green}88, ${C.green}33), repeating-linear-gradient(45deg, #00000010 0 6px, transparent 6px 12px), #1a1a1a`
+              : '#e0e0e0',
+            position: 'relative',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {image && (
+              <span style={{
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 28, color: '#fff',
+                textShadow: '0 2px 12px rgba(0,0,0,0.5)', textAlign: 'center', padding: '0 24px',
+              }}>🍕 Don Mario</span>
+            )}
+            {!image && <span style={{ color: '#999', fontSize: 12 }}>Sin og:image</span>}
+          </div>
+          <div style={{ padding: '10px 12px', background: '#f7f8fa' }}>
+            <div style={{ fontSize: 10.5, color: '#65676b', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+              {domain}
+            </div>
+            <div style={{
+              fontSize: 14, color: '#050505', fontWeight: 600, marginTop: 3,
+              fontFamily: 'Inter', lineHeight: 1.3,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }}>{title}</div>
+            <div style={{
+              fontSize: 11.5, color: '#65676b', marginTop: 4, lineHeight: 1.35,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }}>{desc}</div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function TwitterCard({ tags, url }) {
+  const title = tags['twitter:title'] || tags['og:title'] || '—';
+  const desc = tags['twitter:description'] || tags['og:description'] || '—';
+  const image = tags['twitter:image'] || tags['og:image'];
+  const domain = url ? new URL(url).hostname : '';
+  const cardType = tags['twitter:card'] || 'summary';
+
+  return (
+    <Card style={{ padding: 0, overflow: 'hidden', background: 'rgba(255,255,255,0.025)' }}>
+      <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <TwitterLogo/>
+        <div>
+          <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>X · Twitter Card</div>
+          <div style={{ fontSize: 11, color: C.text3 }}>{cardType}</div>
+        </div>
+      </div>
+      <div style={{ padding: 16, background: '#000' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <div style={{ width: 36, height: 36, borderRadius: '50%', background: C.green, color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Syne', fontWeight: 800, fontSize: 14 }}>DM</div>
+          <div>
+            <div style={{ fontSize: 13, color: '#fff', fontWeight: 700 }}>Don Mario <span style={{ color: '#71767b', fontWeight: 400 }}>@pizzeriadonmario</span></div>
+            <div style={{ fontSize: 11, color: '#71767b' }}>Hace 2h</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 13.5, color: '#e7e9ea', marginBottom: 10, lineHeight: 1.4 }}>
+          Probá nuestras pizzas artesanales hechas con masa madre 48h y horno de leña 🍕✨
+        </div>
+        <div style={{ border: '1px solid #2f3336', borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{
+            height: 168,
+            background: image
+              ? `linear-gradient(135deg, ${C.green}88, ${C.green}33), repeating-linear-gradient(45deg, #00000010 0 6px, transparent 6px 12px), #1a1a1a`
+              : '#16181c',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {image && (
+              <span style={{
+                fontFamily: 'Syne', fontWeight: 700, fontSize: 28, color: '#fff',
+                textShadow: '0 2px 12px rgba(0,0,0,0.5)', textAlign: 'center', padding: '0 24px',
+              }}>🍕 Don Mario</span>
+            )}
+            {!image && <span style={{ color: '#71767b', fontSize: 12 }}>Sin twitter:image</span>}
+          </div>
+          <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.02)' }}>
+            <div style={{ fontSize: 11.5, color: '#71767b' }}>From {domain}</div>
+            <div style={{
+              fontSize: 14, color: '#e7e9ea', fontWeight: 500, marginTop: 4, lineHeight: 1.3,
+              display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }}>{title}</div>
+            <div style={{
+              fontSize: 12, color: '#71767b', marginTop: 4, lineHeight: 1.4,
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }}>{desc}</div>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function GoogleSerpPreview({ title, description, url, duplicateTitle, duplicateDescription }) {
+  return (
+    <Card style={{ padding: 0, overflow: 'hidden', background: 'rgba(255,255,255,0.025)' }}>
+      <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <GoogleLogo/>
+        <div>
+          <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>Google</div>
+          <div style={{ fontSize: 11, color: C.text3 }}>SERP preview</div>
+        </div>
+      </div>
+      <div style={{ padding: 20, background: '#fff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#f1f3f4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#5f6368', fontWeight: 700 }}>P</div>
+          <div>
+            <div style={{ fontSize: 13, color: '#202124', fontWeight: 500, lineHeight: 1.1 }}>Pizzería Don Mario</div>
+            <div style={{ fontSize: 11, color: '#5f6368', lineHeight: 1.1 }}>{url}</div>
+          </div>
+        </div>
+        <a href="#" style={{
+          display: 'block', fontSize: 20, color: '#1a0dab', fontWeight: 400,
+          textDecoration: 'none', marginTop: 6, marginBottom: 4, fontFamily: 'Inter',
+        }}>{title.length > 60 ? title.slice(0, 60) + '...' : title}</a>
+        <div style={{
+          fontSize: 14, color: '#4d5156', lineHeight: 1.4,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        }}>{description.length > 160 ? description.slice(0, 160) + '...' : description}</div>
+      </div>
+      <div style={{ padding: '12px 18px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <Badge tone="default" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          Title {title.length} chars
+        </Badge>
+        <Badge tone="default" style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          Desc {description.length} chars
+        </Badge>
+        {description.length > 160 && <Badge tone="amber">Desc &gt; 160</Badge>}
+        {duplicateTitle && <Badge tone="red">Title duplicado</Badge>}
+        {duplicateDescription && <Badge tone="red">Desc duplicada</Badge>}
+      </div>
+    </Card>
+  );
+}
+
+function FacebookLogo() {
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="#1877f2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073"/></svg>;
+}
+function TwitterLogo() {
+  return <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>;
+}
+function GoogleLogo() {
+  return <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>;
+}
+
+function SocialPreviews({ data }) {
+  return (
+    <div>
+      <SectionTitle
+        kicker="Vista previa"
+        title="¿Cómo se ve compartida?"
+        sub="Cómo aparece esta página en Google, Facebook/LinkedIn y X"
+      />
+      <div className="social-grid" style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16,
+      }}>
+        <GoogleSerpPreview
+          title={data.title} description={data.description} url={data.url}
+          duplicateTitle={data.duplicate_title} duplicateDescription={data.duplicate_description}
+        />
+        <FacebookCard tags={data.social_media_tags} url={data.url}/>
+        <TwitterCard tags={data.social_media_tags} url={data.url}/>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ops footer
+// ─────────────────────────────────────────────────────────────────────────────
+function OpsFooter({ data }) {
+  return (
+    <Card style={{ padding: '16px 22px', marginTop: 36 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 28, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.text3, fontSize: 12 }}>
+            <IconDollar size={14}/>
+            <span style={{ color: C.text2, fontFamily: 'JetBrains Mono, monospace' }}>${data.cost.toFixed(4)} USD</span>
+            <span>· costo del análisis</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.text3, fontSize: 12 }}>
+            <IconClock size={14}/>
+            <span style={{ color: C.text2, fontFamily: 'JetBrains Mono, monospace' }}>{data.task_time}</span>
+            <span>· tiempo de respuesta</span>
+          </div>
+        </div>
+        <button style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          background: C.green, color: C.bg, border: 'none',
+          fontWeight: 700, fontSize: 13, padding: '10px 18px',
+          borderRadius: 9, cursor: 'pointer',
+          fontFamily: 'Inter', transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 20px ${C.green}40`; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
+          Re-analizar página <IconExternal size={13}/>
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+function OnPageAuditDashboard({ data }) {
+  return (
+    <div>
+      {/* Hero */}
+      <div style={{ marginBottom: 28 }}>
+        <HeroCard data={data}/>
+      </div>
+
+      {/* HTTP status */}
+      <div className="two-col" style={{
+        display: 'grid', gridTemplateColumns: '1fr 2fr',
+        gap: 16, marginBottom: 36, alignItems: 'stretch',
+      }}>
+        <HttpStatusDonut statusCode={data.status_code} statusClass={data.health.http_status_class}/>
+        <Card style={{ padding: 24, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
+          <SectionTitle title="Resumen rápido" sub="Lo principal que aprender de esta auditoría"/>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+            {[
+              { label: 'OnPage Score', value: data.health.onpage_score, of: 100, color: scoreColor(data.health.onpage_score) },
+              { label: 'Health Score', value: data.health.computed_health_score, of: 100, color: scoreColor(data.health.computed_health_score) },
+              { label: 'Issues', value: data.health.issues_count, color: C.red },
+              { label: 'Checks ✓', value: data.health.passing_count, color: C.green },
+            ].map((s, i) => (
+              <div key={i} style={{
+                padding: '12px 14px', borderRadius: 10,
+                background: 'rgba(255,255,255,0.025)', border: `1px solid ${C.border}`,
+              }}>
+                <div style={{ fontSize: 10.5, color: C.text3, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>{s.label}</div>
+                <div style={{
+                  fontFamily: 'Syne', fontWeight: 800, fontSize: 22,
+                  color: s.color, lineHeight: 1.1, marginTop: 4,
+                }}>
+                  {s.value}{s.of && <span style={{ color: C.text3, fontWeight: 500, fontSize: 14 }}>/{s.of}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {/* Issues + Passing checks */}
+      <div className="two-col" style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr',
+        gap: 16, marginBottom: 36, alignItems: 'stretch',
+      }}>
+        <IssuesCard issues={data.issues}/>
+        <PassingChecksCard checks={data.passing_checks}/>
+      </div>
+
+      {/* Performance */}
+      <div style={{ marginBottom: 36 }}>
+        <PerformanceGauges perf={data.performance}/>
+      </div>
+
+      {/* Resources */}
+      <div style={{ marginBottom: 36 }}>
+        <ResourcesBar rb={data.resources_breakdown} pageSize={data.performance.page_size_bytes}/>
+      </div>
+
+      {/* Headings + Content metrics */}
+      <div className="two-col" style={{
+        display: 'grid', gridTemplateColumns: '1.4fr 1fr',
+        gap: 16, marginBottom: 36, alignItems: 'stretch',
+      }}>
+        <HeadingsHierarchy headings={data.headings} headingsCount={data.headings_count}/>
+        <ContentMetrics content={data.content}/>
+      </div>
+
+      {/* Resource errors */}
+      <div style={{ marginBottom: 36 }}>
+        <ResourceErrorsCard errors={data.resource_errors} warnings={data.resource_warnings}/>
+      </div>
+
+      {/* Social previews */}
+      <SocialPreviews data={data}/>
+
+      <OpsFooter data={data}/>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// App
+// ─────────────────────────────────────────────────────────────────────────────
+function App() {
+  return (
+    <div style={{ minHeight: '100vh', padding: '40px 32px 60px', background: '#0a0a0a' }}>
+      <div style={{
+        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
+        backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px)`,
+        backgroundSize: '32px 32px',
+        maskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 90%)',
+        WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 90%)',
+      }}/>
+
+      <div style={{ maxWidth: 1320, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+        {/* Top bar */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 36, paddingBottom: 18,
+          borderBottom: `1px solid ${C.border}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 8, background: C.green,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Syne', fontWeight: 800, color: C.bg, fontSize: 14,
+            }}>E</div>
+            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: C.text }}>EDA</div>
+            <div style={{
+              fontSize: 12, color: C.text3,
+              padding: '2px 8px', borderRadius: 999,
+              border: `1px solid ${C.border}`, marginLeft: 8,
+            }}>On-Page Audit</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 12, color: C.text3 }}>pizzeriadonmario.co</span>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.08)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: C.text2, fontSize: 12, fontWeight: 600,
+            }}>DM</div>
+          </div>
+        </div>
+
+        <OnPageAuditDashboard data={sampleData}/>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>

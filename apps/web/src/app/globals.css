@@ -300,6 +300,38 @@ input::placeholder { color: var(--txt-faint); }
   .footer-grid { grid-template-columns: 1fr; gap: 24px; }
 }
 
+/* ── DASHBOARD LAYOUT ── */
+
+/* Desktop sidebar: hidden on mobile */
+.dashboard-sidebar-wrapper {
+  display: none !important;
+}
+@media (min-width: 768px) {
+  .dashboard-sidebar-wrapper {
+    display: block !important;
+  }
+}
+
+/* Hamburger: visible on mobile only */
+.dashboard-hamburger {
+  display: flex !important;
+}
+@media (min-width: 768px) {
+  .dashboard-hamburger {
+    display: none !important;
+  }
+}
+
+/* Breadcrumb hint: hide on very narrow screens */
+.dashboard-hint {
+  display: none;
+}
+@media (min-width: 520px) {
+  .dashboard-hint {
+    display: inline;
+  }
+}
+
 /* ── DASHBOARD SERP SECTION ── */
 
 /* Keyword highlight in result descriptions */

@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EDA — Core Web Vitals</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0a0a0a; color: #fff; min-height: 100vh;
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button { font-family: inherit; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0a0a0a; }
+    ::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes dialogIn { from { opacity: 0; transform: translateY(12px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+    @media (max-width: 1000px) {
+      .metrics-grid { grid-template-columns: repeat(2, 1fr) !important; }
+      .header-row { flex-direction: column !important; align-items: flex-start !important; gap: 14px !important; }
+    }
+    @media (max-width: 640px) {
+      .metrics-grid { grid-template-columns: 1fr !important; }
+      .hero-cwv { flex-direction: column !important; align-items: flex-start !important; }
+      .hero-cwv-pills { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+const { useState, useEffect, useMemo, useRef } = React;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Design tokens — EDA dark + PSI-style CWV colors
+// ─────────────────────────────────────────────────────────────────────────────
+const C = {
+  bg: '#0a0a0a',
+  bg2: '#171717',
+  card: 'rgba(255,255,255,0.025)',
+  border: 'rgba(255,255,255,0.07)',
+  borderStrong: 'rgba(255,255,255,0.14)',
+  text: '#fff',
+  text2: 'rgba(255,255,255,0.65)',
+  text3: 'rgba(255,255,255,0.45)',
+  text4: 'rgba(255,255,255,0.28)',
+  edaGreen: '#22c55e',
+  // Official CWV colors (PageSpeed Insights)
+  cwvGood:  '#0cce6b',
+  cwvAmber: '#ffa400',
+  cwvPoor:  '#ff4e42',
+  cwvGray:  '#9aa0a6',
+};
+
+const RATING = {
+  good:              { label: 'Bueno',          color: C.cwvGood,  short: '✓' },
+  needs_improvement: { label: 'Necesita mejora', color: C.cwvAmber, short: '~' },
+  poor:              { label: 'Pobre',           color: C.cwvPoor,  short: '✗' },
+  stable:            { label: 'Estable',         color: C.cwvAmber, short: '~' }, // history rating fallback
+  no_data:           { label: 'Sin datos',       color: C.cwvGray,  short: '—' },
+};
+
+const TREND = {
+  improving: { label: 'Mejorando',  color: C.cwvGood,  arrow: 'down' /* for ms-style metrics, lower is better */ },
+  degrading: { label: 'Empeorando', color: C.cwvPoor,  arrow: 'up' },
+  stable:    { label: 'Estable',    color: C.cwvGray,  arrow: 'flat' },
+  no_data:   { label: 'Sin datos',  color: C.cwvGray,  arrow: 'flat' },
+};
+
+// CWV thresholds (Google official)
+const THRESHOLDS = {
+  largest_contentful_paint:          { good: 2500, poor: 4000, unit: 'ms' },
+  interaction_to_next_paint:         { good: 200,  poor: 500,  unit: 'ms' },
+  cumulative_layout_shift:           { good: 0.1,  poor: 0.25, unit: 'score' },
+  first_contentful_paint:            { good: 1800, poor: 3000, unit: 'ms' },
+  experimental_time_to_first_byte:   { good: 800,  poor: 1800, unit: 'ms' },
+};
+
+const METRIC_META = {
+  largest_contentful_paint: {
+    short: 'LCP',
+    name: 'Pintado de Contenido Más Grande',
+    description: 'Tiempo que tarda el elemento más grande visible (imagen, video o bloque de texto) en aparecer. Mide cuándo percibe el usuario que la página ha terminado de cargar.',
+  },
+  interaction_to_next_paint: {
+    short: 'INP',
+    name: 'Interacción al Próximo Paint',
+    description: 'Latencia entre que el usuario interactúa (clic, tap, tecla) y el siguiente frame visible. Reemplazó a FID en marzo 2024 como métrica oficial de interactividad.',
+  },
+  cumulative_layout_shift: {
+    short: 'CLS',
+    name: 'Cambio Acumulativo de Layout',
+    description: 'Suma de todos los desplazamientos inesperados de elementos visuales durante la vida de la página. Mide la estabilidad visual percibida.',
+  },
+  first_contentful_paint: {
+    short: 'FCP',
+    name: 'Pintado de Contenido Inicial',
+    description: 'Momento en que el primer contenido (texto, imagen, SVG) se renderiza. Indica cuándo el usuario percibe que algo está pasando.',
+  },
+  experimental_time_to_first_byte: {
+    short: 'TTFB',
+    name: 'Tiempo al Primer Byte',
+    description: 'Tiempo que tarda el navegador en recibir el primer byte de respuesta del servidor. Indica la velocidad del backend y la red.',
+  },
+};
+
+const isCoreVital = (k) => ['largest_contentful_paint', 'interaction_to_next_paint', 'cumulative_layout_shift'].includes(k);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Format helpers
+// ─────────────────────────────────────────────────────────────────────────────
+const fmtMetric = (v, unit) => {
+  if (v == null) return '—';
+  if (unit === 'score') return v.toFixed(3).replace(/\.?0+$/, '') || '0';
+  if (v >= 1000) return (v / 1000).toFixed(2).replace(/\.?0+$/, '') + ' s';
+  return Math.round(v) + ' ms';
+};
+const fmtMs = (v) => {
+  if (v == null) return '—';
+  if (v >= 1000) return (v / 1000).toFixed(2).replace(/\.?0+$/, '') + 's';
+  return Math.round(v) + 'ms';
+};
+const fmtDate = (s) => {
+  if (!s) return '';
+  const d = new Date(s);
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+};
+const fmtDateShort = (s) => {
+  if (!s) return '';
+  const d = new Date(s);
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' });
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sample data
+// ─────────────────────────────────────────────────────────────────────────────
+function buildTimeseries(start, base, drift = 0, vol = 0.1, weeks = 25) {
+  const arr = [];
+  for (let i = 0; i < weeks; i++) {
+    const dStart = new Date(start);
+    dStart.setDate(dStart.getDate() + i * 7);
+    const dEnd = new Date(dStart);
+    dEnd.setDate(dEnd.getDate() + 28);
+    const noise = 1 + ((Math.sin(i * 1.7) + Math.cos(i * 2.3)) * 0.5) * vol;
+    const trend = 1 + (i / weeks) * drift;
+    const p75 = base * noise * trend;
+    arr.push({
+      date_from: dStart.toISOString().slice(0, 10),
+      date_to: dEnd.toISOString().slice(0, 10),
+      p75: Math.round(p75 * 100) / 100,
+    });
+  }
+  return arr;
+}
+
+function ratingFor(metricKey, value) {
+  if (value == null) return 'no_data';
+  const t = THRESHOLDS[metricKey];
+  if (!t) return 'no_data';
+  if (value <= t.good) return 'good';
+  if (value <= t.poor) return 'needs_improvement';
+  return 'poor';
+}
+
+function attachRatings(metricKey, ts) {
+  return ts.map(p => ({ ...p, rating: ratingFor(metricKey, p.p75) }));
+}
+
+const sampleCurrent = {
+  origin: 'https://pizzeriadonmario.co',
+  collection_period: { from: '2026-04-13', to: '2026-05-10' },
+  performance_score: 72,
+  form_factor: 'PHONE',
+  metrics: {
+    largest_contentful_paint:        { p75: 2780, unit: 'ms', rating: 'needs_improvement' },
+    interaction_to_next_paint:       { p75: 168,  unit: 'ms', rating: 'good' },
+    cumulative_layout_shift:         { p75: 0.07, unit: 'score', rating: 'good' },
+    first_contentful_paint:          { p75: 1640, unit: 'ms', rating: 'good' },
+    experimental_time_to_first_byte: { p75: 950,  unit: 'ms', rating: 'needs_improvement' },
+  },
+};
+
+const histStart = new Date(2025, 10, 10); // Nov 10, 2025
+const lcpTs  = attachRatings('largest_contentful_paint',          buildTimeseries(histStart, 3100, -0.18, 0.08));
+const inpTs  = attachRatings('interaction_to_next_paint',         buildTimeseries(histStart, 195,  -0.16, 0.12));
+const clsTs  = attachRatings('cumulative_layout_shift',           buildTimeseries(histStart, 0.09,  0.05, 0.18));
+const fcpTs  = attachRatings('first_contentful_paint',            buildTimeseries(histStart, 1750, -0.12, 0.09));
+const ttfbTs = attachRatings('experimental_time_to_first_byte',   buildTimeseries(histStart, 880,   0.18, 0.10));
+
+const trendOf = (cur, prev, metricKey) => {
+  if (cur == null || prev == null) return 'no_data';
+  const delta = ((cur - prev) / prev) * 100;
+  if (Math.abs(delta) < 3) return 'stable';
+  // For CLS, lower is better; for all others (ms metrics), lower is better.
+  return delta < 0 ? 'improving' : 'degrading';
+};
+
+const buildHistMetric = (key, ts) => {
+  const cur = ts[ts.length - 1]?.p75 ?? null;
+  const prev = ts[ts.length - 5]?.p75 ?? null; // ~1 month ago
+  const trend = trendOf(cur, prev, key);
+  const delta = (cur != null && prev != null) ? ((cur - prev) / prev) * 100 : null;
+  return {
+    unit: key === 'cumulative_layout_shift' ? 'score' : 'ms',
+    timeseries: ts,
+    current_p75: cur,
+    previous_p75: prev,
+    current_rating: ratingFor(key, cur),
+    trend,
+    delta_pct: delta,
+  };
+};
+
+const sampleHistory = {
+  origin: 'https://pizzeriadonmario.co',
+  data_points_count: 25,
+  first_date: lcpTs[0].date_from,
+  last_date: lcpTs[lcpTs.length - 1].date_to,
+  metrics: {
+    largest_contentful_paint:        buildHistMetric('largest_contentful_paint', lcpTs),
+    interaction_to_next_paint:       buildHistMetric('interaction_to_next_paint', inpTs),
+    cumulative_layout_shift:         buildHistMetric('cumulative_layout_shift', clsTs),
+    first_contentful_paint:          buildHistMetric('first_contentful_paint', fcpTs),
+    experimental_time_to_first_byte: buildHistMetric('experimental_time_to_first_byte', ttfbTs),
+  },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Icons
+// ─────────────────────────────────────────────────────────────────────────────
+const Icon = ({ size = 16, sw = 1.6, fill = 'none', children, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor"
+       strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, ...style }}>
+    {children}
+  </svg>
+);
+const IconCheck     = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 9.5"/></Icon>;
+const IconXCircle   = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></Icon>;
+const IconX         = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>;
+const IconUp        = (p) => <Icon {...p}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></Icon>;
+const IconDown      = (p) => <Icon {...p}><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></Icon>;
+const IconMinus     = (p) => <Icon {...p}><line x1="5" y1="12" x2="19" y2="12"/></Icon>;
+const IconMobile    = (p) => <Icon {...p}><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></Icon>;
+const IconMonitor   = (p) => <Icon {...p}><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></Icon>;
+const IconInfo      = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></Icon>;
+const IconExternal  = (p) => <Icon {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></Icon>;
+const IconWarn      = (p) => <Icon {...p}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></Icon>;
+const IconZap       = (p) => <Icon {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></Icon>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Primitives
+// ─────────────────────────────────────────────────────────────────────────────
+function Card({ children, style, hoverable, ...rest }) {
+  return (
+    <div style={{
+      background: C.card,
+      border: `1px solid ${C.border}`,
+      borderRadius: 16,
+      transition: hoverable ? 'border-color 0.15s, background 0.15s, transform 0.15s' : 'none',
+      ...style,
+    }} {...rest}>{children}</div>
+  );
+}
+
+function Badge({ children, color, bg, style }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      background: bg || `${color}18`, color: color,
+      border: `1px solid ${color}40`,
+      fontSize: 11, fontWeight: 600,
+      padding: '3px 9px', borderRadius: 999,
+      letterSpacing: '0.01em', whiteSpace: 'nowrap',
+      ...style,
+    }}>{children}</span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Performance score gauge (small, top-right)
+// ─────────────────────────────────────────────────────────────────────────────
+function PerfScore({ score, size = 110 }) {
+  const color = score >= 90 ? C.cwvGood : score >= 50 ? C.cwvAmber : C.cwvPoor;
+  const r = (size - 12) / 2;
+  const cx = size / 2, cy = size / 2;
+  const circ = 2 * Math.PI * r;
+  const off = circ * (1 - score / 100);
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+    }}>
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', display: 'block' }}>
+          <circle cx={cx} cy={cy} r={r} fill="none"
+            stroke="rgba(255,255,255,0.06)" strokeWidth="10"/>
+          <circle cx={cx} cy={cy} r={r} fill="none"
+            stroke={color} strokeWidth="10"
+            strokeDasharray={circ} strokeDashoffset={off}
+            strokeLinecap="round"
+            style={{
+              filter: `drop-shadow(0 0 6px ${color}66)`,
+              transition: 'stroke-dashoffset 0.8s cubic-bezier(0.2, 0.9, 0.3, 1)',
+            }}/>
+        </svg>
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 28, color, lineHeight: 1 }}>{score}</div>
+          <div style={{ fontSize: 9.5, color: C.text3, marginTop: 2 }}>/ 100</div>
+        </div>
+      </div>
+      <div style={{
+        fontSize: 10.5, color: C.text3, fontWeight: 600,
+        letterSpacing: '0.06em', textTransform: 'uppercase',
+        textAlign: 'center',
+      }}>Performance<br/>Score</div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sparkline
+// ─────────────────────────────────────────────────────────────────────────────
+function Sparkline({ ts, color, w = 130, h = 36 }) {
+  if (!ts || !ts.length) return <div style={{ height: h, color: C.text4, fontSize: 11, display: 'flex', alignItems: 'center' }}>—</div>;
+  const vs = ts.map(p => p.p75);
+  const max = Math.max(...vs), min = Math.min(...vs);
+  const range = max - min || 1;
+  const padT = 3, padB = 3;
+  const xAt = (i) => (i / (vs.length - 1)) * w;
+  const yAt = (v) => padT + (h - padT - padB) - ((v - min) / range) * (h - padT - padB);
+
+  const linePath = vs.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i).toFixed(1)} ${yAt(v).toFixed(1)}`).join(' ');
+  const areaPath = linePath + ` L ${w} ${h} L 0 ${h} Z`;
+  const lastX = xAt(vs.length - 1), lastY = yAt(vs[vs.length - 1]);
+  const gid = `spk-${Math.round(Math.random() * 1e6)}`;
+
+  return (
+    <svg width={w} height={h} style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3"/>
+          <stop offset="100%" stopColor={color} stopOpacity="0"/>
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gid})`}/>
+      <path d={linePath} stroke={color} strokeWidth="1.5" fill="none" strokeLinejoin="round" strokeLinecap="round"/>
+      <circle cx={lastX} cy={lastY} r="2.5" fill={color} stroke={C.bg} strokeWidth="1.2"/>
+    </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Trend chip
+// ─────────────────────────────────────────────────────────────────────────────
+function TrendChip({ trend, delta, metricKey }) {
+  const t = TREND[trend] || TREND.no_data;
+  const IconC = trend === 'improving' ? IconDown : trend === 'degrading' ? IconUp : IconMinus;
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '3px 8px', borderRadius: 999,
+      background: `${t.color}15`, color: t.color,
+      border: `1px solid ${t.color}40`,
+      fontSize: 11, fontWeight: 600, fontFamily: 'JetBrains Mono, monospace',
+    }}>
+      <IconC size={11}/>
+      {delta != null ? (delta >= 0 ? '+' : '') + delta.toFixed(1) + '%' : t.label}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hero: PSI-style "PASA / NO PASA" assessment
+// ─────────────────────────────────────────────────────────────────────────────
+function CWVAssessmentHero({ current }) {
+  // Core Web Vitals: LCP + INP + CLS. Passing if NONE are 'poor' (i.e. all good or needs_improvement).
+  const lcp = current.metrics.largest_contentful_paint;
+  const inp = current.metrics.interaction_to_next_paint;
+  const cls = current.metrics.cumulative_layout_shift;
+  const cores = [
+    { key: 'largest_contentful_paint',  m: lcp },
+    { key: 'interaction_to_next_paint', m: inp },
+    { key: 'cumulative_layout_shift',   m: cls },
+  ];
+  const failures = cores.filter(c => c.m.rating === 'poor').length;
+  const passing = failures === 0;
+  const hasUnknown = cores.some(c => c.m.rating === 'no_data');
+
+  const heroColor = passing ? C.cwvGood : C.cwvPoor;
+
+  return (
+    <Card style={{
+      padding: 28,
+      background: `linear-gradient(180deg, ${heroColor}10, ${C.card})`,
+      border: `1px solid ${heroColor}40`,
+      position: 'relative', overflow: 'hidden',
+    }}>
+      {/* glow */}
+      <div style={{
+        position: 'absolute', top: -100, left: -100,
+        width: 320, height: 320,
+        background: `radial-gradient(circle, ${heroColor}22, transparent 70%)`,
+        pointerEvents: 'none',
+      }}/>
+
+      <div className="hero-cwv" style={{
+        display: 'flex', alignItems: 'center', gap: 24,
+        position: 'relative', flexWrap: 'wrap',
+      }}>
+        {/* Icon + verdict */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, flex: 1, minWidth: 280 }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: 18,
+            background: `${heroColor}20`,
+            border: `1px solid ${heroColor}50`,
+            color: heroColor,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexShrink: 0,
+            boxShadow: `0 0 32px ${heroColor}30`,
+          }}>
+            {passing ? <IconCheck size={42} sw={2}/> : <IconXCircle size={42} sw={2}/>}
+          </div>
+          <div>
+            <div style={{
+              fontSize: 11, color: C.text3, fontWeight: 600,
+              letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 4,
+            }}>Veredicto · Web Vitals Assessment</div>
+            <h2 style={{
+              fontFamily: 'Syne, sans-serif', fontWeight: 800,
+              fontSize: 'clamp(22px, 3vw, 30px)', lineHeight: 1.1,
+              color: heroColor, letterSpacing: '-0.02em',
+            }}>
+              {passing ? 'PASA' : 'NO PASA'} Core Web Vitals
+            </h2>
+            <p style={{ fontSize: 13, color: C.text2, marginTop: 6, maxWidth: 480 }}>
+              {passing
+                ? 'Tu sitio cumple con los umbrales de Google para experiencia de usuario en los 3 indicadores principales.'
+                : `${failures} de 3 métricas centrales están en estado "Pobre". Google penaliza esto en ranking móvil.`}
+              {hasUnknown && ' Algunas métricas no tienen datos suficientes en CrUX.'}
+            </p>
+          </div>
+        </div>
+
+        {/* 3 core metric pills */}
+        <div className="hero-cwv-pills" style={{
+          display: 'flex', gap: 10, flexWrap: 'wrap',
+        }}>
+          {cores.map(c => {
+            const r = RATING[c.m.rating] || RATING.no_data;
+            const short = METRIC_META[c.key].short;
+            return (
+              <div key={c.key} style={{
+                padding: '12px 16px',
+                background: 'rgba(0,0,0,0.3)',
+                border: `1px solid ${r.color}40`,
+                borderRadius: 12,
+                display: 'flex', flexDirection: 'column', gap: 4,
+                minWidth: 100,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 11, color: C.text3, fontWeight: 600 }}>{short}</span>
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: r.color,
+                    boxShadow: `0 0 6px ${r.color}`,
+                  }}/>
+                </div>
+                <div style={{
+                  fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 20,
+                  color: r.color, lineHeight: 1, letterSpacing: '-0.01em',
+                }}>
+                  {fmtMetric(c.m.p75, c.m.unit)}
+                </div>
+                <div style={{ fontSize: 10.5, color: r.color, fontWeight: 500, letterSpacing: '0.02em' }}>
+                  {r.label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Metric card
+// ─────────────────────────────────────────────────────────────────────────────
+function MetricCard({ metricKey, current, history, onClick }) {
+  const meta = METRIC_META[metricKey];
+  const m = current;
+  const h = history;
+  const rating = RATING[m.rating] || RATING.no_data;
+  const t = h ? THRESHOLDS[metricKey] : null;
+
+  const core = isCoreVital(metricKey);
+
+  return (
+    <Card
+      hoverable
+      onClick={onClick}
+      style={{
+        padding: 22,
+        cursor: 'pointer',
+        position: 'relative',
+        animation: 'fadeUp 0.4s ease both',
+        overflow: 'hidden',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = `${rating.color}50`; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.transform = 'translateY(0)'; }}
+    >
+      {/* Rating accent strip */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: 3,
+        background: rating.color,
+        opacity: 0.7,
+      }}/>
+
+      {/* Header: short code + core badge + rating */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 11.5,
+            color: rating.color, fontWeight: 700,
+            background: `${rating.color}15`, padding: '3px 7px',
+            border: `1px solid ${rating.color}40`,
+            borderRadius: 6, letterSpacing: '0.02em',
+          }}>{meta.short}</span>
+          {core && (
+            <span style={{
+              fontFamily: 'Inter', fontSize: 9.5, fontWeight: 700,
+              color: C.text3, background: 'rgba(255,255,255,0.04)',
+              border: `1px solid ${C.border}`,
+              padding: '2px 6px', borderRadius: 4,
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+            }}>Core</span>
+          )}
+        </div>
+        <Badge color={rating.color}>
+          <span style={{
+            width: 6, height: 6, borderRadius: '50%', background: rating.color,
+          }}/>
+          {rating.label}
+        </Badge>
+      </div>
+
+      {/* Metric name */}
+      <div style={{
+        fontSize: 12, color: C.text3, lineHeight: 1.35, marginBottom: 14,
+        minHeight: 32,
+      }}>{meta.name}</div>
+
+      {/* Big p75 */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 14 }}>
+        <span style={{
+          fontFamily: 'Syne, sans-serif', fontWeight: 800,
+          fontSize: 36, lineHeight: 1,
+          color: rating.color, letterSpacing: '-0.025em',
+          fontVariantNumeric: 'tabular-nums',
+        }}>{m.p75 == null ? '—' : (m.unit === 'score' ? m.p75.toFixed(3).replace(/\.?0+$/, '') || '0' : m.p75 >= 1000 ? (m.p75 / 1000).toFixed(2).replace(/\.?0+$/, '') : Math.round(m.p75))}</span>
+        <span style={{ fontSize: 14, color: C.text3, fontWeight: 500 }}>
+          {m.p75 == null ? '' : (m.unit === 'score' ? '' : m.p75 >= 1000 ? 's' : 'ms')}
+        </span>
+        <span style={{ fontSize: 10.5, color: C.text4, marginLeft: 'auto', fontFamily: 'JetBrains Mono, monospace' }}>
+          p75
+        </span>
+      </div>
+
+      {/* Sparkline + trend (only if history) */}
+      {h && (
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          paddingTop: 14, borderTop: `1px solid ${C.border}`,
+        }}>
+          <Sparkline ts={h.timeseries} color={rating.color} w={130} h={36}/>
+          <TrendChip trend={h.trend} delta={h.delta_pct} metricKey={metricKey}/>
+        </div>
+      )}
+
+      {/* No-history fallback */}
+      {!h && (
+        <div style={{
+          paddingTop: 14, borderTop: `1px solid ${C.border}`,
+          fontSize: 11, color: C.text4, fontStyle: 'italic',
+          display: 'flex', alignItems: 'center', gap: 6,
+        }}>
+          <IconInfo size={11}/> Sin historial disponible
+        </div>
+      )}
+
+      {/* Click hint */}
+      <div style={{
+        position: 'absolute', top: 12, right: 12,
+        fontSize: 9.5, color: C.text4, fontWeight: 600,
+        letterSpacing: '0.05em', textTransform: 'uppercase',
+        display: 'none',
+      }}>Clic para ver →</div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// History dialog with full chart + reference bands
+// ─────────────────────────────────────────────────────────────────────────────
+function HistoryChart({ metricKey, hist, currentP75 }) {
+  const wrapRef = useRef(null);
+  const [w, setW] = useState(700);
+  const h = 300;
+  const [hover, setHover] = useState(null);
+
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    const ro = new ResizeObserver(() => {
+      const r = wrapRef.current.getBoundingClientRect();
+      setW(Math.max(400, r.width));
+    });
+    ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const data = hist.timeseries;
+  const threshold = THRESHOLDS[metricKey];
+  const allVals = data.map(d => d.p75).filter(v => v != null);
+  const dataMax = Math.max(...allVals);
+  const dataMin = Math.min(...allVals);
+  // Make Y range wide enough to show all reference bands meaningfully
+  const yMax = Math.max(dataMax * 1.15, threshold.poor * 1.2);
+  const yMin = 0;
+
+  const pad = { l: 60, r: 20, t: 18, b: 36 };
+  const iw = w - pad.l - pad.r;
+  const ih = h - pad.t - pad.b;
+
+  const xAt = (i) => pad.l + (i / (data.length - 1)) * iw;
+  const yAt = (v) => pad.t + ih - ((v - yMin) / (yMax - yMin)) * ih;
+
+  // Reference band Y-ranges
+  const goodTop = yAt(0);
+  const goodBot = yAt(threshold.good);
+  const needsTop = yAt(threshold.good);
+  const needsBot = yAt(threshold.poor);
+  const poorTop = yAt(threshold.poor);
+  const poorBot = pad.t + ih;
+
+  const linePath = data.map((d, i) => `${i === 0 ? 'M' : 'L'} ${xAt(i).toFixed(1)} ${yAt(d.p75).toFixed(1)}`).join(' ');
+
+  const onMove = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * w;
+    const i = Math.round(((x - pad.l) / iw) * (data.length - 1));
+    if (i >= 0 && i < data.length) setHover(i);
+    else setHover(null);
+  };
+
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(t => yMax * t);
+  const xTickIdx = data.map((_, i) => i).filter((_, i, arr) => i === 0 || i === arr.length - 1 || i === Math.floor(arr.length / 2) || i === Math.floor(arr.length / 4) || i === Math.floor(3 * arr.length / 4));
+
+  const fmtY = (v) => metricKey === 'cumulative_layout_shift' ? v.toFixed(2) : v >= 1000 ? (v / 1000).toFixed(1) + 's' : Math.round(v) + 'ms';
+
+  return (
+    <div ref={wrapRef} style={{ width: '100%', position: 'relative' }}>
+      <svg width={w} height={h} onMouseMove={onMove} onMouseLeave={() => setHover(null)} style={{ display: 'block', cursor: 'crosshair' }}>
+        {/* Reference bands */}
+        <rect x={pad.l} y={goodBot} width={iw} height={goodTop - goodBot} fill={C.cwvGood} fillOpacity="0.08"/>
+        <rect x={pad.l} y={needsBot} width={iw} height={needsTop - needsBot} fill={C.cwvAmber} fillOpacity="0.08"/>
+        <rect x={pad.l} y={poorTop} width={iw} height={poorBot - poorTop} fill={C.cwvPoor} fillOpacity="0.08"/>
+
+        {/* Threshold lines */}
+        <line x1={pad.l} x2={w - pad.r} y1={yAt(threshold.good)} y2={yAt(threshold.good)}
+              stroke={C.cwvGood} strokeWidth="1" strokeDasharray="4 4" strokeOpacity="0.5"/>
+        <line x1={pad.l} x2={w - pad.r} y1={yAt(threshold.poor)} y2={yAt(threshold.poor)}
+              stroke={C.cwvPoor} strokeWidth="1" strokeDasharray="4 4" strokeOpacity="0.5"/>
+
+        {/* Threshold labels */}
+        <text x={w - pad.r - 4} y={yAt(threshold.good) - 4} textAnchor="end"
+              fontSize="10" fontFamily="JetBrains Mono, monospace" fill={C.cwvGood} fontWeight="600">
+          ≤ {fmtY(threshold.good)} bueno
+        </text>
+        <text x={w - pad.r - 4} y={yAt(threshold.poor) - 4} textAnchor="end"
+              fontSize="10" fontFamily="JetBrains Mono, monospace" fill={C.cwvPoor} fontWeight="600">
+          &gt; {fmtY(threshold.poor)} pobre
+        </text>
+
+        {/* Y axis ticks */}
+        {yTicks.map((t, i) => (
+          <text key={i} x={pad.l - 8} y={yAt(t) + 4} textAnchor="end"
+                fontSize="10.5" fontFamily="JetBrains Mono, monospace" fill={C.text3}>
+            {fmtY(t)}
+          </text>
+        ))}
+
+        {/* X axis ticks */}
+        {xTickIdx.map(i => (
+          <text key={i} x={xAt(i)} y={h - pad.b + 18} textAnchor="middle"
+                fontSize="10.5" fontFamily="Inter" fill={C.text3}>
+            {fmtDateShort(data[i].date_from)}
+          </text>
+        ))}
+
+        {/* Line */}
+        <path d={linePath} stroke={C.edaGreen} strokeWidth="2.2" fill="none"
+              strokeLinecap="round" strokeLinejoin="round"
+              style={{ filter: `drop-shadow(0 0 6px ${C.edaGreen}66)` }}/>
+
+        {/* Points */}
+        {data.map((d, i) => {
+          const r = RATING[d.rating] || RATING.no_data;
+          return (
+            <circle key={i} cx={xAt(i)} cy={yAt(d.p75)} r={hover === i ? 5 : 3}
+              fill={r.color} stroke={C.bg} strokeWidth="1.5"/>
+          );
+        })}
+
+        {/* Hover line */}
+        {hover != null && (
+          <line x1={xAt(hover)} x2={xAt(hover)} y1={pad.t} y2={pad.t + ih}
+            stroke={C.text2} strokeOpacity="0.4" strokeDasharray="3 3"/>
+        )}
+      </svg>
+
+      {/* Tooltip */}
+      {hover != null && (() => {
+        const d = data[hover];
+        const r = RATING[d.rating] || RATING.no_data;
+        return (
+          <div style={{
+            position: 'absolute',
+            left: Math.min(w - 220, Math.max(8, xAt(hover) + 14)),
+            top: yAt(d.p75) - 70,
+            background: 'rgba(16,16,16,0.97)',
+            border: `1px solid ${C.borderStrong}`,
+            borderRadius: 10, padding: '10px 14px',
+            pointerEvents: 'none', minWidth: 200,
+            boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+            fontFamily: 'Inter',
+          }}>
+            <div style={{ fontSize: 10.5, color: C.text3, marginBottom: 4 }}>
+              {fmtDateShort(d.date_from)} → {fmtDateShort(d.date_to)}
+            </div>
+            <div style={{
+              fontFamily: 'Syne', fontWeight: 700, fontSize: 20, color: r.color,
+              fontVariantNumeric: 'tabular-nums',
+            }}>{fmtMetric(d.p75, hist.unit)}</div>
+            <div style={{ fontSize: 11, color: r.color, marginTop: 2, fontWeight: 500 }}>
+              {r.label}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+function MetricDialog({ open, metricKey, current, history, onClose }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+  const meta = METRIC_META[metricKey];
+  const r = RATING[current.rating] || RATING.no_data;
+  const h = history;
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 100,
+      background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 24, animation: 'overlayIn 0.2s ease',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#0f0f0f',
+        border: `1px solid ${C.borderStrong}`,
+        borderRadius: 18, padding: 28,
+        width: '100%', maxWidth: 760, maxHeight: '92vh',
+        overflowY: 'auto',
+        animation: 'dialogIn 0.25s ease',
+        boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18, gap: 16 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span style={{
+                fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: r.color, fontWeight: 700,
+                background: `${r.color}18`, padding: '3px 8px',
+                border: `1px solid ${r.color}40`, borderRadius: 6,
+              }}>{meta.short}</span>
+              <Badge color={r.color}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: r.color }}/>
+                {r.label}
+              </Badge>
+              {isCoreVital(metricKey) && (
+                <span style={{
+                  fontSize: 9.5, fontWeight: 700, color: C.text3,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${C.border}`,
+                  padding: '2px 7px', borderRadius: 4,
+                  letterSpacing: '0.06em', textTransform: 'uppercase',
+                }}>Core Web Vital</span>
+              )}
+            </div>
+            <h2 style={{
+              fontFamily: 'Syne', fontWeight: 700, fontSize: 22,
+              color: C.text, letterSpacing: '-0.01em',
+            }}>{meta.name}</h2>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'rgba(255,255,255,0.06)', border: `1px solid ${C.border}`,
+            color: C.text2, width: 32, height: 32, borderRadius: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          }}><IconX size={15}/></button>
+        </div>
+
+        {/* Chart */}
+        {h ? (
+          <>
+            <div style={{
+              padding: '4px 0 16px',
+            }}>
+              <div style={{
+                fontSize: 11, color: C.text3, fontWeight: 600,
+                letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 12,
+              }}>Histórico ({h.timeseries.length} semanas)</div>
+              <HistoryChart metricKey={metricKey} hist={h} currentP75={current.p75}/>
+            </div>
+
+            {/* Stat boxes */}
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginTop: 18,
+            }}>
+              {[
+                { label: 'p75 actual',  value: fmtMetric(h.current_p75, h.unit), color: r.color },
+                { label: 'p75 anterior', value: fmtMetric(h.previous_p75, h.unit), color: C.text },
+                { label: 'Delta', value: h.delta_pct != null ? (h.delta_pct >= 0 ? '+' : '') + h.delta_pct.toFixed(1) + '%' : '—', color: TREND[h.trend].color },
+                { label: 'Tendencia', value: TREND[h.trend].label, color: TREND[h.trend].color, small: true },
+              ].map((s, i) => (
+                <div key={i} style={{
+                  padding: '12px 14px', borderRadius: 10,
+                  background: 'rgba(255,255,255,0.025)', border: `1px solid ${C.border}`,
+                }}>
+                  <div style={{ fontSize: 10.5, color: C.text3, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>
+                    {s.label}
+                  </div>
+                  <div style={{
+                    fontFamily: 'Syne', fontWeight: 700,
+                    fontSize: s.small ? 15 : 20,
+                    color: s.color, marginTop: 4, lineHeight: 1.1,
+                    fontVariantNumeric: 'tabular-nums',
+                  }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div style={{
+            padding: '40px 24px', textAlign: 'center',
+            background: 'rgba(255,255,255,0.02)',
+            border: `1px dashed ${C.border}`, borderRadius: 12,
+          }}>
+            <div style={{ color: C.text3, fontSize: 14 }}>Sin historial disponible para este sitio.</div>
+          </div>
+        )}
+
+        {/* Footer description */}
+        <div style={{
+          marginTop: 18, padding: '14px 16px', borderRadius: 12,
+          background: 'rgba(96,165,250,0.06)',
+          border: '1px solid rgba(96,165,250,0.2)',
+          display: 'flex', gap: 12, alignItems: 'flex-start',
+        }}>
+          <div style={{ color: C.text2, flexShrink: 0, marginTop: 1 }}>
+            <IconInfo size={16}/>
+          </div>
+          <div>
+            <div style={{ fontSize: 12, color: C.text, fontWeight: 600, marginBottom: 4 }}>¿Qué mide?</div>
+            <div style={{ fontSize: 12.5, color: C.text2, lineHeight: 1.55 }}>{meta.description}</div>
+            <div style={{
+              fontSize: 11, color: C.text3, marginTop: 8, fontFamily: 'JetBrains Mono, monospace',
+              display: 'flex', gap: 12, flexWrap: 'wrap',
+            }}>
+              <span><span style={{ color: C.cwvGood }}>●</span> Bueno ≤ {fmtMetric(THRESHOLDS[metricKey].good, THRESHOLDS[metricKey].unit)}</span>
+              <span><span style={{ color: C.cwvAmber }}>●</span> Mejora ≤ {fmtMetric(THRESHOLDS[metricKey].poor, THRESHOLDS[metricKey].unit)}</span>
+              <span><span style={{ color: C.cwvPoor }}>●</span> Pobre &gt; {fmtMetric(THRESHOLDS[metricKey].poor, THRESHOLDS[metricKey].unit)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// No-data fallback (both null)
+// ─────────────────────────────────────────────────────────────────────────────
+function NoDataFallback() {
+  return (
+    <Card style={{
+      padding: 40, textAlign: 'center',
+      background: `linear-gradient(180deg, rgba(255,164,0,0.05), ${C.card})`,
+      border: `1px solid rgba(255,164,0,0.25)`,
+    }}>
+      <div style={{
+        width: 64, height: 64, borderRadius: 16,
+        background: 'rgba(255,164,0,0.15)',
+        border: '1px solid rgba(255,164,0,0.4)',
+        color: C.cwvAmber, display: 'inline-flex',
+        alignItems: 'center', justifyContent: 'center',
+        marginBottom: 18,
+      }}>
+        <IconWarn size={30}/>
+      </div>
+      <h2 style={{
+        fontFamily: 'Syne', fontWeight: 700, fontSize: 22,
+        color: C.text, letterSpacing: '-0.01em', marginBottom: 10,
+      }}>Sin datos reales de usuarios</h2>
+      <p style={{
+        fontSize: 14, color: C.text2, lineHeight: 1.6,
+        maxWidth: 540, margin: '0 auto 18px',
+      }}>
+        Este sitio no tiene suficiente tráfico en Chrome para reportar datos reales de UX.
+        Mostramos métricas sintéticas del crawler como fallback.
+      </p>
+      <button style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        background: C.cwvAmber, color: C.bg, border: 'none',
+        fontWeight: 700, fontSize: 13, padding: '10px 18px',
+        borderRadius: 9, cursor: 'pointer', fontFamily: 'Inter',
+      }}>
+        Ver métricas sintéticas (Lighthouse) <IconExternal size={13}/>
+      </button>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+function CoreWebVitalsDashboard({ current, history }) {
+  const [open, setOpen] = useState(null);
+
+  if (!current && !history) return <NoDataFallback/>;
+
+  const METRIC_ORDER = [
+    'largest_contentful_paint',
+    'interaction_to_next_paint',
+    'cumulative_layout_shift',
+    'first_contentful_paint',
+    'experimental_time_to_first_byte',
+  ];
+
+  return (
+    <div>
+      {/* Header */}
+      <header className="header-row" style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
+        marginBottom: 28, gap: 24, flexWrap: 'wrap',
+      }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{ fontFamily: 'Caveat, cursive', color: C.edaGreen, fontSize: 18 }}>
+              Datos reales de usuarios
+            </div>
+            <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.text4 }}/>
+            <div style={{ fontSize: 12, color: C.text3 }}>Chrome UX Report (CrUX)</div>
+          </div>
+          <h1 style={{
+            fontFamily: 'Syne, sans-serif', fontWeight: 800,
+            fontSize: 'clamp(28px, 4vw, 40px)', lineHeight: 1.05,
+            color: C.text, letterSpacing: '-0.025em', marginBottom: 10,
+          }}>Core Web Vitals</h1>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            {current?.collection_period && (
+              <span style={{ fontSize: 13, color: C.text3 }}>
+                Período: <strong style={{ color: C.text2, fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}>
+                  {fmtDate(current.collection_period.from)} → {fmtDate(current.collection_period.to)}
+                </strong>
+              </span>
+            )}
+            {current?.form_factor && (
+              <Badge color={C.edaGreen}>
+                {current.form_factor === 'PHONE' ? <IconMobile size={11}/> : <IconMonitor size={11}/>}
+                {current.form_factor === 'PHONE' ? 'Móvil' : 'Escritorio'}
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {current && (
+          <PerfScore score={current.performance_score}/>
+        )}
+      </header>
+
+      {/* Hero assessment */}
+      {current && (
+        <div style={{ marginBottom: 24 }}>
+          <CWVAssessmentHero current={current}/>
+        </div>
+      )}
+
+      {/* Metric grid */}
+      <div className="metrics-grid" style={{
+        display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 16,
+      }}>
+        {METRIC_ORDER.map(key => current?.metrics[key] && (
+          <MetricCard
+            key={key}
+            metricKey={key}
+            current={current.metrics[key]}
+            history={history?.metrics[key]}
+            onClick={() => setOpen(key)}
+          />
+        ))}
+      </div>
+
+      {/* Origin footer */}
+      {current && (
+        <div style={{
+          marginTop: 24, padding: '14px 18px',
+          background: 'rgba(255,255,255,0.02)',
+          border: `1px solid ${C.border}`, borderRadius: 12,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          gap: 16, flexWrap: 'wrap',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: C.text2 }}>
+            <span style={{ fontFamily: 'Caveat, cursive', color: C.edaGreen, fontSize: 16 }}>Origen:</span>
+            <span style={{ fontFamily: 'JetBrains Mono, monospace', color: C.text, fontWeight: 500 }}>{current.origin}</span>
+          </div>
+          {history && (
+            <div style={{ fontSize: 11.5, color: C.text3 }}>
+              {history.data_points_count} puntos · {fmtDate(history.first_date)} → {fmtDate(history.last_date)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Dialog */}
+      <MetricDialog
+        open={open != null}
+        metricKey={open}
+        current={open ? current?.metrics[open] : null}
+        history={open ? history?.metrics[open] : null}
+        onClose={() => setOpen(null)}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// App shell with state switcher
+// ─────────────────────────────────────────────────────────────────────────────
+function App() {
+  const [state, setState] = useState('full');
+
+  const dataset = {
+    full:        { current: sampleCurrent, history: sampleHistory },
+    currentOnly: { current: sampleCurrent, history: null },
+    none:        { current: null, history: null },
+  }[state];
+
+  return (
+    <div style={{ minHeight: '100vh', padding: '40px 32px 60px', background: '#0a0a0a', position: 'relative' }}>
+      <div style={{
+        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
+        backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px)`,
+        backgroundSize: '32px 32px',
+        maskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 90%)',
+        WebkitMaskImage: 'radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 90%)',
+      }}/>
+      <div style={{ maxWidth: 1280, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+        {/* Top bar with state switcher */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginBottom: 32, paddingBottom: 18,
+          borderBottom: `1px solid ${C.border}`,
+          flexWrap: 'wrap', gap: 16,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 8, background: C.edaGreen,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Syne', fontWeight: 800, color: C.bg, fontSize: 14,
+            }}>E</div>
+            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: C.text }}>EDA</div>
+            <div style={{
+              fontSize: 12, color: C.text3,
+              padding: '2px 8px', borderRadius: 999,
+              border: `1px solid ${C.border}`, marginLeft: 8,
+            }}>CrUX · Web Vitals</div>
+          </div>
+
+          <div style={{
+            display: 'flex', gap: 4, padding: 4,
+            background: 'rgba(255,255,255,0.04)',
+            border: `1px solid ${C.border}`,
+            borderRadius: 10,
+          }}>
+            {[
+              { v: 'full',        l: 'Actual + Historial' },
+              { v: 'currentOnly', l: 'Solo actual' },
+              { v: 'none',        l: 'Sin datos CrUX' },
+            ].map(opt => (
+              <button key={opt.v} onClick={() => setState(opt.v)} style={{
+                padding: '6px 12px', borderRadius: 7,
+                background: state === opt.v ? `${C.edaGreen}25` : 'transparent',
+                border: `1px solid ${state === opt.v ? `${C.edaGreen}50` : 'transparent'}`,
+                color: state === opt.v ? C.edaGreen : C.text2,
+                fontSize: 12, fontWeight: 600, fontFamily: 'Inter',
+                cursor: 'pointer', transition: 'all 0.15s',
+              }}>{opt.l}</button>
+            ))}
+          </div>
+        </div>
+
+        <CoreWebVitalsDashboard
+          key={state}
+          current={dataset.current}
+          history={dataset.history}
+        />
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>
