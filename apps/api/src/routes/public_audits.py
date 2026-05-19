@@ -229,3 +229,56 @@ async def get_dashboard_audit_status(
         result=job.result,
         error=job.error,
     )
+
+
+# ── Business Profile ───────────────────────────────────────────────────────────
+
+class BusinessProfileRequest(BaseModel):
+    keyword: str
+    location_code: int = 2170
+
+
+@router.post("/business-profile", status_code=200)
+async def get_business_profile(body: BusinessProfileRequest):
+    """
+    Trae el perfil de Google Business de un negocio.
+    keyword puede ser nombre libre ("Restaurante Mario Bogotá") o CID ("cid:123456789").
+    """
+    from src.services.dataforseo import get_my_business_info
+    try:
+        data = get_my_business_info(body.keyword, location_code=body.location_code)
+        return data
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ── Discover Prospects ─────────────────────────────────────────────────────────
+
+class DiscoverRequest(BaseModel):
+    categories: list[str] | None = None
+    description: str | None = None
+    title: str | None = None
+    location_country: str | None = None
+    location_coordinate: str | None = None  # "lat,lng,radius_km"
+    limit: int = 50
+
+
+@router.post("/discover-prospects", status_code=200)
+async def discover_prospects(body: DiscoverRequest):
+    """
+    Descubre prospectos en la base de Business Listings de DataForSEO.
+    Retorna hasta `limit` negocios ordenados por opportunity_score desc.
+    """
+    from src.services.dataforseo import get_business_listings_search
+    try:
+        data = get_business_listings_search(
+            categories=body.categories,
+            description=body.description,
+            title=body.title,
+            location_country=body.location_country,
+            location_coordinate=body.location_coordinate,
+            limit=body.limit,
+        )
+        return data
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

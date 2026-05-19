@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 
 from src.config import settings
 from src.worker import celery_app
+from src.services.crux import query_crux, CruxNoDataError
+from src.services.scoring import derive_subscores, calculate_health_score
 
 _sync_db_url = settings.database_url.replace(
     "postgresql+asyncpg://", "postgresql+psycopg2://"
@@ -49,7 +51,7 @@ def run_dashboard_audit(self, job_id: str, domain: str, keyword: str) -> dict:  
             total_cost = 0.0
             section_errors: list[str] = []
 
-            # ── Fase 1: OnPage + SERP + Labs en paralelo ──────────────────
+            # ── Fase 1: OnPage + SERP + Labs + CrUX en paralelo ──────────
             def _onpage() -> tuple[str, dict]:
                 try:
                     data = get_onpage_data(origin_url)
@@ -74,8 +76,17 @@ def run_dashboard_audit(self, job_id: str, domain: str, keyword: str) -> dict:  
             def _labs() -> tuple[str, dict]:
                 return "labs", get_related_keywords(keyword)
 
-            with ThreadPoolExecutor(max_workers=3) as pool:
-                futures = [pool.submit(fn) for fn in (_onpage, _serp, _labs)]
+            def _crux() -> tuple[str, dict]:
+                try:
+                    data = query_crux(origin_url)
+                except CruxNoDataError:
+                    data = {"error": "no_data", "detail": f"No CrUX data for {origin_url}"}
+                except Exception as exc:
+                    data = {"error": "timeout", "detail": str(exc)}
+                return "crux", data
+
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                futures = [pool.submit(fn) for fn in (_onpage, _serp, _labs, _crux)]
                 for future in as_completed(futures):
                     try:
                         name, data = future.result()
@@ -104,11 +115,34 @@ def run_dashboard_audit(self, job_id: str, domain: str, keyword: str) -> dict:  
             except Exception as exc:
                 section_errors.append(f"keyword_data: {exc}")
 
+            # ── Health Score compuesto ─────────────────────────────────────
+            from src.services.dataforseo import calculate_seo_score
+            onpage_sect = sections.get("onpage", {})
+            crux_sect   = sections.get("crux")
+
+            seo_sc = (
+                calculate_seo_score(onpage_sect)
+                if onpage_sect and "error" not in onpage_sect
+                else None
+            )
+            subscores = derive_subscores(
+                seo_score=seo_sc,
+                crux_data=crux_sect if crux_sect and "error" not in crux_sect else None,
+                onpage_data=onpage_sect if onpage_sect and "error" not in onpage_sect else None,
+            )
+            hs = calculate_health_score(subscores)
+
             result: dict = {
                 "domain": domain,
                 "keyword": keyword,
                 "sections": sections,
                 "total_cost_usd": round(total_cost, 6),
+                "health": {
+                    "health_score": hs.health_score,
+                    "available_dimensions": hs.available_dimensions,
+                    "total_dimensions": hs.total_dimensions,
+                    "breakdown": hs.breakdown,
+                },
             }
             if section_errors:
                 result["errors"] = section_errors

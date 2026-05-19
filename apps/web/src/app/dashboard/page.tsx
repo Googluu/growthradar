@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { readFreeReport, saveFreeReport, triggerAudit, pollAudit, API_BASE } from "@/lib/audit";
-import type { AuditFormData, DashboardAuditResult } from "@/types/dashboard";
+import type { AuditFormData, DashboardAuditResult, HealthScoreData } from "@/types/dashboard";
+import { SaludDigitalSection } from "@/components/dashboard/SaludDigitalSection";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const MAX_CHIPS = 5;
@@ -323,52 +324,71 @@ function ScanningCard({ domain, businessName }: { domain: string; businessName: 
   );
 }
 
-// ── Resumen placeholder (cuando ya hay reporte) ───────────────────────────────
+// ── Resumen (cuando ya hay reporte) ──────────────────────────────────────────
 function ResumeSection() {
-  return (
-    <div style={{ maxWidth: 800, margin: "0 auto", padding: "48px 28px" }}>
-      <div style={{ fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 20, marginBottom: 12, textAlign: "center" }}>
-        Tu reporte está listo
-      </div>
-      <h1 style={{
-        fontFamily: "var(--font-syne), sans-serif", fontWeight: 800,
-        fontSize: "clamp(26px, 3.5vw, 40px)", color: "#fff",
-        letterSpacing: "-0.03em", textAlign: "center", marginBottom: 14,
-      }}>
-        Resumen de salud digital
-      </h1>
-      <p style={{
-        fontFamily: "var(--font-inter), sans-serif", fontSize: 15,
-        color: "rgba(255,255,255,0.4)", textAlign: "center", marginBottom: 48, lineHeight: 1.6,
-      }}>
-        Explora cada sección desde el panel lateral para ver el análisis completo.
-      </p>
+  const [health, setHealth] = useState<HealthScoreData | null>(null);
+  const [domain, setDomain] = useState<string>("");
 
-      {/* Cards de acceso rápido */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
-        {[
-          { label: "Posicionamiento",    href: "/dashboard/posicionamiento",       emoji: "🔍", desc: "Cómo apareces en Google" },
-          { label: "Sitio web",          href: "/dashboard/sitio-web",             emoji: "🌐", desc: "Auditoría técnica y velocidad" },
-          { label: "Perfil de Google",   href: "/dashboard/perfil-google",         emoji: "📍", desc: "Google Maps y reseñas" },
-          { label: "Investigación",      href: "/dashboard/investigacion-mercado", emoji: "📊", desc: "Keywords y volumen" },
-          { label: "Prospectos",         href: "/dashboard/prospectos",            emoji: "🎯", desc: "Clientes potenciales" },
-          { label: "Automatizaciones",   href: "/dashboard/automatizaciones",      emoji: "⚡", desc: "Acciones automáticas — BETA" },
-        ].map(c => (
-          <a
-            key={c.href} href={c.href}
-            style={{
-              display: "block", padding: "20px 20px",
-              background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)",
-              borderRadius: 14, textDecoration: "none", transition: "all 0.15s",
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = Gs; e.currentTarget.style.borderColor = Gb; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.025)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; }}
-          >
-            <div style={{ fontSize: 24, marginBottom: 10 }}>{c.emoji}</div>
-            <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 600, color: "#fff", marginBottom: 4 }}>{c.label}</div>
-            <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 12, color: "rgba(255,255,255,0.38)" }}>{c.desc}</div>
-          </a>
-        ))}
+  useEffect(() => {
+    const report = readFreeReport();
+    if (report?.auditResult?.health) setHealth(report.auditResult.health);
+    if (report?.auditResult?.domain) setDomain(report.auditResult.domain);
+  }, []);
+
+  return (
+    <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px", display: "flex", flexDirection: "column", gap: 40 }}>
+      {/* Health score hero */}
+      {health && <SaludDigitalSection data={health}/>}
+
+      {/* Quick-access cards */}
+      <div>
+        {!health && (
+          <>
+            <div style={{ fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 20, marginBottom: 12, textAlign: "center" }}>
+              Tu reporte está listo
+            </div>
+            <h1 style={{
+              fontFamily: "var(--font-syne), sans-serif", fontWeight: 800,
+              fontSize: "clamp(26px, 3.5vw, 40px)", color: "#fff",
+              letterSpacing: "-0.03em", textAlign: "center", marginBottom: 14,
+            }}>
+              Resumen de salud digital
+            </h1>
+            <p style={{
+              fontFamily: "var(--font-inter), sans-serif", fontSize: 15,
+              color: "rgba(255,255,255,0.4)", textAlign: "center", marginBottom: 40, lineHeight: 1.6,
+            }}>
+              Explora cada sección desde el panel lateral para ver el análisis completo.
+            </p>
+          </>
+        )}
+
+        {/* Cards de acceso rápido */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+          {[
+            { label: "Posicionamiento",    href: "/dashboard/posicionamiento",       emoji: "🔍", desc: "Cómo apareces en Google" },
+            { label: "Sitio web",          href: "/dashboard/sitio-web",             emoji: "🌐", desc: "Auditoría técnica y velocidad" },
+            { label: "Perfil de Google",   href: "/dashboard/perfil-google",         emoji: "📍", desc: "Google Maps y reseñas" },
+            { label: "Investigación",      href: "/dashboard/investigacion-mercado", emoji: "📊", desc: "Keywords y volumen" },
+            { label: "Prospectos",         href: "/dashboard/prospectos",            emoji: "🎯", desc: "Clientes potenciales" },
+            { label: "Automatizaciones",   href: "/dashboard/automatizaciones",      emoji: "⚡", desc: "Acciones automáticas — BETA" },
+          ].map(c => (
+            <a
+              key={c.href} href={c.href}
+              style={{
+                display: "block", padding: "20px 20px",
+                background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.07)",
+                borderRadius: 14, textDecoration: "none", transition: "all 0.15s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = Gs; e.currentTarget.style.borderColor = Gb; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.025)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; }}
+            >
+              <div style={{ fontSize: 24, marginBottom: 10 }}>{c.emoji}</div>
+              <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 13, fontWeight: 600, color: "#fff", marginBottom: 4 }}>{c.label}</div>
+              <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 12, color: "rgba(255,255,255,0.38)" }}>{c.desc}</div>
+            </a>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -410,7 +430,7 @@ export default function DashboardResumen() {
         throw new Error((serp as { error: string })?.error ?? "Sin datos SERP");
       }
 
-      saveFreeReport(serp, data);
+      saveFreeReport(serp, data, result);
       // Redirect to posicionamiento to show SERP results immediately
       router.push("/dashboard/posicionamiento");
     } catch (err) {
