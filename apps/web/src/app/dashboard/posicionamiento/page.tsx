@@ -2,9 +2,14 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { SerpSection } from "@/components/dashboard/SerpSection";
-import { readFreeReport, saveFreeReport, triggerAudit, pollAudit, API_BASE } from "@/lib/audit";
-import type { SerpData, AuditFormData } from "@/types/dashboard";
-import type { DashboardAuditResult } from "@/types/dashboard";
+import {
+  readFreeReport,
+  saveFreeReport,
+  triggerAudit,
+  pollAudit,
+  fetchAuditResult,
+} from "@/lib/audit";
+import type { SerpData, AuditFormData, DashboardAuditResult } from "@/types/dashboard";
 
 const G  = "#5DB848";
 const Gs = "rgba(93,184,72,0.12)";
@@ -48,7 +53,7 @@ function ScanningOverlay({ keyword }: { keyword: string }) {
           </svg>
         </div>
         <div style={{ fontFamily: "var(--font-caveat), cursive", color: G, fontSize: 17, marginBottom: 6 }}>
-          Buscando "{keyword}"
+          Buscando &quot;{keyword}&quot;
         </div>
         <div style={{ fontFamily: "var(--font-inter), sans-serif", fontSize: 13,
           color: "rgba(255,255,255,0.35)", marginBottom: 24 }}>
@@ -188,19 +193,19 @@ export default function PosicionamientoPage() {
     }
   }, []);
 
-  const runSearch = useCallback(async (keyword: string, formData: AuditFormData) => {
+  const runSearch = useCallback(async (formData: AuditFormData) => {
+    const keyword = formData.keywords[0] ?? "";
     setScanKeyword(keyword);
     setPhase("scanning");
     setErrMsg("");
 
     try {
-      const { job_id, status, cached } = await triggerAudit(formData.domain, keyword);
+      // ✅ FIX Bug B: trigger con AuditFormData COMPLETO
+      const { job_id, status, cached } = await triggerAudit(formData);
 
       let result: DashboardAuditResult;
       if (status === "completed" && cached) {
-        const res = await fetch(`${API_BASE}/public/dashboard-audit/${job_id}`);
-        const job = await res.json() as { result: DashboardAuditResult };
-        result = job.result;
+        result = await fetchAuditResult(job_id);
       } else {
         result = await pollAudit(job_id);
       }
@@ -210,7 +215,11 @@ export default function PosicionamientoPage() {
         throw new Error((serp as { error: string })?.error ?? "Sin datos SERP");
       }
 
-      saveFreeReport(serp, formData);
+      // ✅ FIX Bug A: pasar el `result` COMPLETO a saveFreeReport
+      // Esto desbloquea sitio-web, investigacion-mercado y perfil-google
+      // para que lean del cache via readFreeReport()?.auditResult?.sections
+      saveFreeReport(serp, formData, result);
+
       setSerpData(serp);
       setLastForm(formData);
       setPhase("result");
@@ -220,8 +229,11 @@ export default function PosicionamientoPage() {
     }
   }, []);
 
+  // Wrapper para "Buscar otra keyword" desde el header del SerpSection
   const handleSearchAgain = useCallback((kw: string) => {
-    if (lastForm) runSearch(kw, lastForm);
+    if (!lastForm) return;
+    // Sustituye la keyword principal manteniendo el resto del form
+    runSearch({ ...lastForm, keywords: [kw, ...lastForm.keywords.slice(1)] });
   }, [lastForm, runSearch]);
 
   return (
@@ -249,9 +261,7 @@ export default function PosicionamientoPage() {
         {phase === "error" && (
           <ErrorCard
             message={errMsg}
-            onRetry={() => {
-              if (lastForm) runSearch(lastForm.keywords[0] ?? "", lastForm);
-            }}
+            onRetry={() => { if (lastForm) runSearch(lastForm); }}
           />
         )}
       </div>
