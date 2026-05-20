@@ -57,10 +57,6 @@ body {
 }
 
 /* ── ANIMATIONS ── */
-@keyframes pulse-soft {
-  0%, 100% { opacity: 0.6; }
-  50%       { opacity: 1; }
-}
 
 @keyframes fadeUp {
   from { opacity: 0; transform: translateY(28px); }
@@ -207,10 +203,6 @@ input::placeholder { color: var(--txt-faint); }
 }
 
 /* ── LANDING PAGE — NEW DESIGN ── */
-@keyframes pulse-dot {
-  0%, 100% { opacity: 0.3; transform: scale(0.8); }
-  50%       { opacity: 1;   transform: scale(1.2); }
-}
 
 /* Nav: hide desktop links on mobile */
 .nav-desktop { display: flex; }
@@ -312,26 +304,6 @@ input::placeholder { color: var(--txt-faint); }
   }
 }
 
-/* Hamburger: visible on mobile only */
-.dashboard-hamburger {
-  display: flex !important;
-}
-@media (min-width: 768px) {
-  .dashboard-hamburger {
-    display: none !important;
-  }
-}
-
-/* Breadcrumb hint: hide on very narrow screens */
-.dashboard-hint {
-  display: none;
-}
-@media (min-width: 520px) {
-  .dashboard-hint {
-    display: inline;
-  }
-}
-
 /* ── DASHBOARD SERP SECTION ── */
 
 /* Keyword highlight in result descriptions */
@@ -402,3 +374,75 @@ mark {
   .serp-results-table th:nth-child(4),
   .serp-results-table td:nth-child(4) { display: none; }
 }
+
+/* ── Pulse animations usadas por el dashboard ─────────────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.85); }
+}
+ 
+@keyframes pulse-soft {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
+}
+ 
+/* ── Sidebar visibility: desktop vs mobile ────────────────────────────────── */
+/* Desktop por default: sidebar visible, hamburger oculto */
+.dashboard-hamburger {
+  display: none;
+}
+ 
+.dashboard-hint {
+  display: inline;
+}
+ 
+/* Mobile (≤768px): sidebar oculto, hamburger visible */
+@media (max-width: 768px) {
+  .dashboard-sidebar-wrapper {
+    display: none;
+  }
+  .dashboard-hamburger {
+    display: flex !important;
+  }
+  .dashboard-hint {
+    display: none !important;
+  }
+}
+ 
+/* ── Dashboard content responsive padding ─────────────────────────────────── */
+@media (max-width: 768px) {
+  main {
+    padding: 16px !important;
+  }
+}
+ 
+/* ── Scrollbar consistente del dark theme ─────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}
+ 
+/* ── Focus-visible para accesibilidad ─────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid #5DB848;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+ 
+/* Excepción para inputs y selects que ya tienen su propio focus-state */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+ 
