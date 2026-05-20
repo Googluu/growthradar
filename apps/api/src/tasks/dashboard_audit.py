@@ -1,9 +1,17 @@
 """
-Celery task: run_dashboard_audit
+src/tasks/dashboard_audit.py — ACTUALIZACIÓN COMPLETA
 
-Ejecuta las 4 secciones DataForSEO para un dominio:
-  Fase 1 (paralela)  — OnPage · SERP · Labs
-  Fase 2 (secuencial) — Keyword Data con las keywords top de Labs
+Cambios vs versión anterior:
+  1. Recibe solo job_id; lee todos los params del modelo DashboardJob en DB
+  2. Corre TODAS las secciones (no solo 4):
+     Fase 1 (paralelo): OnPage · SERP · Labs · CrUX · Business Profile
+     Fase 2 (paralelo): Keyword Data · Reviews
+     Fase 3:            Recommendations (Claude) sobre datos agregados
+  3. Usa location_code y language_code del modelo (no hardcodea Colombia)
+  4. Si fetch_reviews=False, saltea reviews silenciosamente
+  5. Si google_business_keyword es None, saltea Business Profile + Reviews
+  6. target_keywords[] del modelo se usan para SERPs múltiples (uno por keyword)
+  7. Recommendations genera el JSON con Claude usando el prompt versionado
 """
 
 import uuid
@@ -15,8 +23,6 @@ from sqlalchemy.orm import Session
 
 from src.config import settings
 from src.worker import celery_app
-from src.services.crux import query_crux, CruxNoDataError
-from src.services.scoring import derive_subscores, calculate_health_score
 
 _sync_db_url = settings.database_url.replace(
     "postgresql+asyncpg://", "postgresql+psycopg2://"
@@ -25,22 +31,40 @@ _engine = create_engine(_sync_db_url, pool_pre_ping=True)
 
 
 @celery_app.task(name="dashboard.run_dashboard_audit", bind=True, max_retries=1)
-def run_dashboard_audit(self, job_id: str, domain: str, keyword: str) -> dict:  # type: ignore[type-arg]
+def run_dashboard_audit(self, job_id: str) -> dict:  # type: ignore[type-arg]
     from src.models.dashboard_job import DashboardJob
+    from src.services.crux import CruxNoDataError, query_crux
     from src.services.dataforseo import (
+        calculate_seo_score,
+        get_business_listings_search,
+        get_my_business_info,
+        get_google_reviews,
         get_onpage_data,
         get_related_keywords,
         get_search_volume,
         get_serp_data,
     )
+    from src.services.recommendations import generate_recommendations
+    from src.services.scoring import calculate_health_score, derive_subscores
 
     job_uuid = uuid.UUID(job_id)
-    origin_url = f"https://{domain}"
 
     with Session(_engine) as db:
         job = db.get(DashboardJob, job_uuid)
         if job is None:
             return {"error": "job_not_found"}
+
+        # ── Leer params del modelo (no de los args del task) ─────────────────
+        domain                  = job.domain
+        primary_keyword         = job.keyword
+        business_name           = job.business_name or domain
+        target_keywords         = job.target_keywords or [primary_keyword]
+        google_business_keyword = job.google_business_keyword
+        fetch_reviews_flag      = job.fetch_reviews
+        location_code           = job.location_code or 2170
+        language_code           = job.language_code or "es"
+
+        origin_url = f"https://{domain}"
 
         job.status = "running"
         job.started_at = datetime.now(timezone.utc)
@@ -51,12 +75,14 @@ def run_dashboard_audit(self, job_id: str, domain: str, keyword: str) -> dict:  
             total_cost = 0.0
             section_errors: list[str] = []
 
-            # ── Fase 1: OnPage + SERP + Labs + CrUX en paralelo ──────────
+            # ═════════════════════════════════════════════════════════════════
+            # FASE 1: OnPage + primer SERP + Labs + CrUX + Business Info (paralelo)
+            # ═════════════════════════════════════════════════════════════════
+
             def _onpage() -> tuple[str, dict]:
                 try:
                     data = get_onpage_data(origin_url)
-                    # status 40501 = "Domain Not Found" → reintenta con www (timeout reducido)
-                    # No se reintenta en timeout/network errors para no duplicar la espera
+                    # Fallback con www. si el dominio no responde
                     if data.get("status_code") == 40501:
                         try:
                             data = get_onpage_data(f"https://www.{domain}", timeout=12.0)
@@ -71,10 +97,27 @@ def run_dashboard_audit(self, job_id: str, domain: str, keyword: str) -> dict:  
                 return "onpage", data
 
             def _serp() -> tuple[str, dict]:
-                return "serp", get_serp_data(keyword, target_domain=domain)
+                try:
+                    data = get_serp_data(
+                        primary_keyword,
+                        target_domain=domain,
+                        location_code=location_code,
+                        language_code=language_code,
+                    )
+                except Exception as exc:
+                    data = {"error": "serp_failed", "detail": str(exc)}
+                return "serp", data
 
             def _labs() -> tuple[str, dict]:
-                return "labs", get_related_keywords(keyword)
+                try:
+                    data = get_related_keywords(
+                        primary_keyword,
+                        location_code=location_code,
+                        language_code=language_code,
+                    )
+                except Exception as exc:
+                    data = {"error": "labs_failed", "detail": str(exc)}
+                return "labs", data
 
             def _crux() -> tuple[str, dict]:
                 try:
@@ -85,56 +128,176 @@ def run_dashboard_audit(self, job_id: str, domain: str, keyword: str) -> dict:  
                     data = {"error": "timeout", "detail": str(exc)}
                 return "crux", data
 
-            with ThreadPoolExecutor(max_workers=4) as pool:
-                futures = [pool.submit(fn) for fn in (_onpage, _serp, _labs, _crux)]
+            def _business_info() -> tuple[str, dict | None]:
+                if not google_business_keyword:
+                    return "business_info", None
+                try:
+                    data = get_my_business_info(
+                        google_business_keyword,
+                        location_code=location_code,
+                        language_code=language_code,
+                    )
+                except Exception as exc:
+                    data = {"error": "business_info_failed", "detail": str(exc)}
+                return "business_info", data
+
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                futures = [pool.submit(fn) for fn in (
+                    _onpage, _serp, _labs, _crux, _business_info,
+                )]
                 for future in as_completed(futures):
                     try:
                         name, data = future.result()
-                        sections[name] = data
-                        total_cost += float(data.get("cost") or 0)
+                        if data is not None:
+                            sections[name] = data
+                            total_cost += float(
+                                data.get("cost") if isinstance(data, dict) else 0
+                            ) or 0
                     except Exception as exc:
                         section_errors.append(f"phase1: {exc}")
 
-            # ── Fase 2: Keyword Data con keywords de Labs ──────────────────
-            labs_keywords = [
-                kw["keyword"]
-                for kw in sections.get("labs", {}).get("keywords", [])[:20]
-                if kw.get("keyword")
-            ]
-            if keyword not in labs_keywords:
-                labs_keywords.insert(0, keyword)
+            # ═════════════════════════════════════════════════════════════════
+            # FASE 2: Keyword Data + Reviews (paralelo)
+            # ═════════════════════════════════════════════════════════════════
 
-            try:
-                kw_data = get_search_volume(
-                    labs_keywords[:20],
-                    location_code=2170,   # Colombia
-                    language_code="es",
-                )
-                sections["keyword_data"] = kw_data
-                total_cost += float(kw_data.get("cost") or 0)
-            except Exception as exc:
-                section_errors.append(f"keyword_data: {exc}")
+            # Construir lista de keywords para Keyword Data: combinar target_keywords
+            # del form con las top de Labs (hasta 20)
+            labs_sect = sections.get("labs")
+            if isinstance(labs_sect, dict) and "error" not in labs_sect:
+                labs_keywords_from_api = [
+                    kw["keyword"]
+                    for kw in labs_sect.get("keywords", [])[:15]
+                    if kw.get("keyword")
+                ]
+            else:
+                labs_keywords_from_api = []
 
-            # ── Health Score compuesto ─────────────────────────────────────
-            from src.services.dataforseo import calculate_seo_score
-            onpage_sect = sections.get("onpage", {})
-            crux_sect   = sections.get("crux")
+            kw_list = list(dict.fromkeys(target_keywords + labs_keywords_from_api))[:20]
+
+            def _keyword_data() -> tuple[str, dict]:
+                try:
+                    data = get_search_volume(
+                        kw_list,
+                        location_code=location_code,
+                        language_code=language_code,
+                    )
+                except Exception as exc:
+                    data = {"error": "keyword_data_failed", "detail": str(exc)}
+                return "keyword_data", data
+
+            def _reviews() -> tuple[str, dict | None]:
+                if not fetch_reviews_flag or not google_business_keyword:
+                    return "reviews", None
+                try:
+                    data = get_google_reviews(
+                        google_business_keyword,
+                        location_code=location_code,
+                        language_code=language_code,
+                    )
+                except Exception as exc:
+                    data = {"error": "reviews_failed", "detail": str(exc)}
+                return "reviews", data
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(fn) for fn in (_keyword_data, _reviews)]
+                for future in as_completed(futures):
+                    try:
+                        name, data = future.result()
+                        if data is not None:
+                            sections[name] = data
+                            total_cost += float(
+                                data.get("cost") if isinstance(data, dict) else 0
+                            ) or 0
+                    except Exception as exc:
+                        section_errors.append(f"phase2: {exc}")
+
+            # ═════════════════════════════════════════════════════════════════
+            # FASE 3: Health Score compuesto
+            # ═════════════════════════════════════════════════════════════════
+
+            onpage_sect   = sections.get("onpage")
+            crux_sect     = sections.get("crux")
+            business_sect = sections.get("business_info")
+
+            def _is_ok(s: dict | None) -> bool:
+                return bool(s) and isinstance(s, dict) and "error" not in s
 
             seo_sc = (
                 calculate_seo_score(onpage_sect)
-                if onpage_sect and "error" not in onpage_sect
+                if _is_ok(onpage_sect)
                 else None
             )
             subscores = derive_subscores(
                 seo_score=seo_sc,
-                crux_data=crux_sect if crux_sect and "error" not in crux_sect else None,
-                onpage_data=onpage_sect if onpage_sect and "error" not in onpage_sect else None,
+                crux_data=crux_sect if _is_ok(crux_sect) else None,
+                onpage_data=onpage_sect if _is_ok(onpage_sect) else None,
+                business_data=business_sect if _is_ok(business_sect) else None,
             )
             hs = calculate_health_score(subscores)
 
+            # ═════════════════════════════════════════════════════════════════
+            # FASE 4: Recommendations con Claude
+            # ═════════════════════════════════════════════════════════════════
+
+            recommendations: dict | None = None
+            try:
+                # Construir el payload de auditoría para Claude.
+                # Incluir solo secciones que tengan datos válidos.
+                audit_payload = {
+                    "scores": {
+                        "health_score": hs.health_score,
+                        "available_dimensions": hs.available_dimensions,
+                        "total_dimensions": hs.total_dimensions,
+                        "breakdown": hs.breakdown,
+                    },
+                }
+                if _is_ok(onpage_sect):
+                    audit_payload["onpage"] = onpage_sect
+                if _is_ok(crux_sect):
+                    audit_payload["crux"] = crux_sect
+                if _is_ok(business_sect):
+                    audit_payload["business"] = business_sect
+
+                # Para SERPs, pasar resumen liviano (no el JSON completo de 50KB)
+                serp_sect = sections.get("serp")
+                if _is_ok(serp_sect):
+                    audit_payload["serp_summary"] = {
+                        "keyword": serp_sect.get("keyword"),
+                        "target_visibility": serp_sect.get("target_visibility"),
+                        "average_position": serp_sect.get("average_position"),
+                        "has_ai_overview": serp_sect.get("has_ai_overview"),
+                        "top_3_domains": serp_sect.get("top_3_domains", [])[:3],
+                    }
+
+                reviews_sect = sections.get("reviews")
+                if _is_ok(reviews_sect):
+                    # Pasar solo las negativas + recientes (no las 100)
+                    audit_payload["reviews"] = {
+                        "avg_rating_in_sample": reviews_sect.get("avg_rating_in_sample"),
+                        "owner_response_rate":  reviews_sect.get("owner_response_rate"),
+                        "negative_reviews_with_text": reviews_sect.get("negative_reviews_with_text", [])[:5],
+                    }
+
+                recommendations = generate_recommendations(
+                    company_name=business_name,
+                    company_domain=domain,
+                    audit_data=audit_payload,
+                )
+            except Exception as recs_exc:
+                section_errors.append(f"recommendations: {recs_exc}")
+                recommendations = {
+                    "error": "recommendations_failed",
+                    "detail": str(recs_exc),
+                }
+
+            # ═════════════════════════════════════════════════════════════════
+            # Resultado final
+            # ═════════════════════════════════════════════════════════════════
+
             result: dict = {
                 "domain": domain,
-                "keyword": keyword,
+                "keyword": primary_keyword,
+                "business_name": business_name,
                 "sections": sections,
                 "total_cost_usd": round(total_cost, 6),
                 "health": {
@@ -143,6 +306,7 @@ def run_dashboard_audit(self, job_id: str, domain: str, keyword: str) -> dict:  
                     "total_dimensions": hs.total_dimensions,
                     "breakdown": hs.breakdown,
                 },
+                "recommendations": recommendations,
             }
             if section_errors:
                 result["errors"] = section_errors
