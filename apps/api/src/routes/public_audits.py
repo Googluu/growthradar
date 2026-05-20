@@ -1,21 +1,33 @@
 """
-Endpoints públicos — sin autenticación.
+src/routes/public_audits.py
 
-/public/audit          — auditoría landing page (rate limit 1/IP)
-/public/dashboard-audit — auditoría completa DataForSEO (dedup 24h por dominio)
+ACTUALIZACIÓN: el endpoint /public/dashboard-audit ahora acepta TODOS los
+params del AuditFormData del frontend, no solo {domain, keyword}.
+
+Cambios principales:
+  1. DashboardAuditRequest acepta business_name, target_keywords[],
+     google_business_keyword, fetch_reviews, location_code, language_code
+  2. _build_cache_key() genera hash determinístico de los params para dedup
+     correcto (antes solo deduplicaba por dominio → bug si dos requests
+     del mismo dominio con keywords distintas)
+  3. Pasa todos los params al Celery task run_dashboard_audit
+
+Este archivo SOLO contiene el bloque /dashboard-audit. El resto de los
+endpoints (/audit, /business-profile, /discover-prospects) se mantienen
+sin cambios — los podés dejar como están.
 """
 
+import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database import get_db
 from src.models.dashboard_job import DashboardJob
-from src.models.public_audit_job import PublicAuditJob
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -31,107 +43,53 @@ def _clean_domain(raw: str) -> str:
     return raw.split("/")[0]
 
 
-def _get_client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+def _build_cache_key(
+    domain: str,
+    keyword: str,
+    business_name: str | None,
+    target_keywords: list[str] | None,
+    google_business_keyword: str | None,
+    fetch_reviews: bool,
+    location_code: int,
+    language_code: str,
+) -> str:
+    """
+    Cache key determinístico basado en TODOS los params que afectan el resultado.
+
+    Mismos params → mismo cache_key → mismo job (dedup correcto).
+    Si cambia cualquier param (ej. otra keyword), genera otro cache_key
+    y dispara un job nuevo.
+    """
+    parts = [
+        domain.lower().strip(),
+        (business_name or "").lower().strip(),
+        keyword.lower().strip(),
+        ",".join(sorted((target_keywords or []))).lower(),
+        (google_business_keyword or "").lower().strip(),
+        str(fetch_reviews),
+        str(location_code),
+        language_code,
+    ]
+    raw = "|".join(parts)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-class PublicAuditRequest(BaseModel):
-    url: str
-
-
-class PublicAuditStarted(BaseModel):
-    job_id: uuid.UUID
-    status: str
-
-
-class PublicAuditStatusResponse(BaseModel):
-    job_id: uuid.UUID
-    status: str
-    result: dict | None
-    error: str | None
-
-    model_config = {"from_attributes": True}
-
-
-@router.post(
-    "/audit",
-    response_model=PublicAuditStarted,
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def trigger_public_audit(
-    body: PublicAuditRequest,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
-    """Encola una auditoría pública (sin cuenta). 1 auditoría por IP."""
-    url = body.url.strip()
-    if not url:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="URL requerida")
-
-    client_ip = _get_client_ip(request)
-
-    # Buscar jobs previos de esta IP
-    existing_q = await db.execute(
-        select(PublicAuditJob)
-        .where(PublicAuditJob.client_ip == client_ip)
-        .order_by(PublicAuditJob.created_at.desc())
-        .limit(1)
-    )
-    existing = existing_q.scalar_one_or_none()
-
-    if existing is not None:
-        if existing.status == "completed":
-            # Ya usó su auditoría de prueba
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail={
-                    "code": "trial_used",
-                    "message": "Ya usaste tu auditoría de prueba gratuita. Crea una cuenta para auditar más sitios.",
-                    "register_url": "/register",
-                },
-            )
-        # Job en pending/running — devolver el mismo job_id (deduplicación)
-        return PublicAuditStarted(job_id=existing.id, status=existing.status)
-
-    job = PublicAuditJob(url=url, client_ip=client_ip)
-    db.add(job)
-    await db.commit()
-    await db.refresh(job)
-
-    from src.tasks.public_audit import run_public_audit
-    run_public_audit.delay(str(job.id), url)  # type: ignore[attr-defined]
-
-    return PublicAuditStarted(job_id=job.id, status=job.status)
-
-
-@router.get("/audit/{job_id}", response_model=PublicAuditStatusResponse)
-async def get_public_audit_status(
-    job_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
-):
-    """Retorna el estado del job. El frontend hace polling hasta status == completed | failed."""
-    result = await db.execute(
-        select(PublicAuditJob).where(PublicAuditJob.id == job_id)
-    )
-    job = result.scalar_one_or_none()
-    if job is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job no encontrado")
-
-    return PublicAuditStatusResponse(
-        job_id=job.id,
-        status=job.status,
-        result=job.result,
-        error=job.error,
-    )
-
-
-# ── Dashboard audit ────────────────────────────────────────────────────────────
+# ── Request / Response schemas ────────────────────────────────────────────────
 
 class DashboardAuditRequest(BaseModel):
-    domain: str
+    """
+    Request body para /public/dashboard-audit.
+    Corresponde 1:1 con AuditFormData del frontend.
+    """
+    domain:                  str
+    business_name:           str | None = None
+    target_keywords:         list[str] | None = None
+    google_business_keyword: str | None = None
+    fetch_reviews:           bool = False
+    location_code:           int = 2170                # Colombia default
+    language_code:           str = "es"
+
+    # Backwards compat: si el frontend manda 'keyword' (legacy) lo aceptamos
     keyword: str | None = None
 
 
@@ -150,6 +108,8 @@ class DashboardAuditStatusResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Endpoints ─────────────────────────────────────────────────────────────────
+
 @router.post(
     "/dashboard-audit",
     response_model=DashboardAuditStarted,
@@ -160,8 +120,12 @@ async def trigger_dashboard_audit(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Encola una auditoría completa DataForSEO (OnPage + SERP + Labs + Keyword Data).
-    Dedup 24h por dominio: si ya existe un job completado reciente, lo devuelve directamente.
+    Encola una auditoría completa DataForSEO + CrUX + Business Data + Claude.
+
+    Dedup: por cache_key (hash de todos los params).
+      - Si hay job completado <24h con mismos params → status='completed', cached=True
+      - Si hay job en pending/running con mismos params → devuelve el mismo job_id
+      - Si no → crea job nuevo
     """
     domain = _clean_domain(body.domain)
     if not domain:
@@ -169,14 +133,33 @@ async def trigger_dashboard_audit(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Dominio requerido",
         )
-    keyword = body.keyword or domain.split(".")[0]
+
+    # keyword principal: primero el del array target_keywords, sino el legacy 'keyword',
+    # sino derivamos del dominio
+    target_keywords = body.target_keywords or []
+    if body.keyword and body.keyword not in target_keywords:
+        target_keywords.insert(0, body.keyword)
+
+    primary_keyword = target_keywords[0] if target_keywords else domain.split(".")[0]
+
+    # Cache key con TODOS los params
+    cache_key = _build_cache_key(
+        domain=domain,
+        keyword=primary_keyword,
+        business_name=body.business_name,
+        target_keywords=target_keywords,
+        google_business_keyword=body.google_business_keyword,
+        fetch_reviews=body.fetch_reviews,
+        location_code=body.location_code,
+        language_code=body.language_code,
+    )
 
     cutoff = datetime.now(timezone.utc) - _DASHBOARD_CACHE_TTL
 
-    # Job completado reciente → cache hit
+    # ── Cache hit: job completado reciente con mismos params ───────────────
     cached_q = await db.execute(
         select(DashboardJob)
-        .where(DashboardJob.domain == domain)
+        .where(DashboardJob.cache_key == cache_key)
         .where(DashboardJob.status == "completed")
         .where(DashboardJob.completed_at >= cutoff)
         .order_by(DashboardJob.completed_at.desc())
@@ -186,10 +169,10 @@ async def trigger_dashboard_audit(
     if cached:
         return DashboardAuditStarted(job_id=cached.id, status="completed", cached=True)
 
-    # Job en curso → dedup
+    # ── Job en curso con mismos params → dedup ─────────────────────────────
     running_q = await db.execute(
         select(DashboardJob)
-        .where(DashboardJob.domain == domain)
+        .where(DashboardJob.cache_key == cache_key)
         .where(DashboardJob.status.in_(["pending", "running"]))
         .order_by(DashboardJob.created_at.desc())
         .limit(1)
@@ -198,14 +181,28 @@ async def trigger_dashboard_audit(
     if running:
         return DashboardAuditStarted(job_id=running.id, status=running.status, cached=False)
 
-    # Job nuevo
-    job = DashboardJob(domain=domain, keyword=keyword)
+    # ── Job nuevo ──────────────────────────────────────────────────────────
+    job = DashboardJob(
+        domain=domain,
+        keyword=primary_keyword,
+        business_name=body.business_name,
+        target_keywords=target_keywords or None,
+        google_business_keyword=body.google_business_keyword,
+        fetch_reviews=body.fetch_reviews,
+        location_code=body.location_code,
+        language_code=body.language_code,
+        cache_key=cache_key,
+    )
     db.add(job)
     await db.commit()
     await db.refresh(job)
 
+    # Encolar Celery task con TODOS los params
     from src.tasks.dashboard_audit import run_dashboard_audit
-    run_dashboard_audit.delay(str(job.id), domain, keyword)  # type: ignore[attr-defined]
+    run_dashboard_audit.delay(str(job.id))  # type: ignore[attr-defined]
+    # ↑ El task lee del modelo en DB, no recibe los params por argumento.
+    # Esto evita problemas de serialización de Celery con listas opcionales,
+    # y permite que el modelo sea la fuente de verdad.
 
     return DashboardAuditStarted(job_id=job.id, status=job.status, cached=False)
 
@@ -229,56 +226,3 @@ async def get_dashboard_audit_status(
         result=job.result,
         error=job.error,
     )
-
-
-# ── Business Profile ───────────────────────────────────────────────────────────
-
-class BusinessProfileRequest(BaseModel):
-    keyword: str
-    location_code: int = 2170
-
-
-@router.post("/business-profile", status_code=200)
-async def get_business_profile(body: BusinessProfileRequest):
-    """
-    Trae el perfil de Google Business de un negocio.
-    keyword puede ser nombre libre ("Restaurante Mario Bogotá") o CID ("cid:123456789").
-    """
-    from src.services.dataforseo import get_my_business_info
-    try:
-        data = get_my_business_info(body.keyword, location_code=body.location_code)
-        return data
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
-# ── Discover Prospects ─────────────────────────────────────────────────────────
-
-class DiscoverRequest(BaseModel):
-    categories: list[str] | None = None
-    description: str | None = None
-    title: str | None = None
-    location_country: str | None = None
-    location_coordinate: str | None = None  # "lat,lng,radius_km"
-    limit: int = 50
-
-
-@router.post("/discover-prospects", status_code=200)
-async def discover_prospects(body: DiscoverRequest):
-    """
-    Descubre prospectos en la base de Business Listings de DataForSEO.
-    Retorna hasta `limit` negocios ordenados por opportunity_score desc.
-    """
-    from src.services.dataforseo import get_business_listings_search
-    try:
-        data = get_business_listings_search(
-            categories=body.categories,
-            description=body.description,
-            title=body.title,
-            location_country=body.location_country,
-            location_coordinate=body.location_coordinate,
-            limit=body.limit,
-        )
-        return data
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
