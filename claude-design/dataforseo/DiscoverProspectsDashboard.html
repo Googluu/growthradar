@@ -1,0 +1,1721 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EDA — Descubrir Prospectos</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600;700&family=Caveat:wght@400;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin=""></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" crossorigin=""/>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0a0a0a; color: #fff; min-height: 100vh;
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font-family: inherit; }
+    input { background: none; color: #fff; border: none; outline: none; }
+    a { color: inherit; text-decoration: none; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes slideInRight { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes slideInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+    .leaflet-container { background: #0a0a0a !important; font-family: 'Inter', sans-serif !important; border-radius: 0 0 16px 16px; }
+    .leaflet-control-attribution { background: rgba(0,0,0,0.6) !important; color: rgba(255,255,255,0.4) !important; font-size: 9px !important; }
+    .leaflet-control-attribution a { color: rgba(255,255,255,0.55) !important; }
+    .leaflet-control-zoom a {
+      background: rgba(20,20,20,0.9) !important;
+      color: #fff !important;
+      border: 1px solid rgba(255,255,255,0.1) !important;
+    }
+    .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+      background: #141414 !important;
+      color: #fff !important;
+      border: 1px solid rgba(255,255,255,0.14) !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5) !important;
+    }
+    .leaflet-popup-content { margin: 14px 16px !important; font-size: 13px !important; min-width: 200px; }
+    .leaflet-popup-close-button { color: rgba(255,255,255,0.5) !important; }
+
+    .prospect-pin {
+      border-radius: 50%;
+      border: 2px solid #0a0a0a;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1);
+      display: flex; align-items: center; justify-content: center;
+      color: #0a0a0a;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 11px;
+      letter-spacing: -0.03em;
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+    .prospect-pin:hover { transform: scale(1.15); }
+
+    .marker-cluster {
+      background: rgba(34, 197, 94, 0.3) !important;
+      border-radius: 50%;
+    }
+    .marker-cluster div {
+      background: #22c55e !important;
+      color: #0a0a0a !important;
+      font-family: 'Syne', sans-serif !important;
+      font-weight: 800 !important;
+      border: 2px solid #0a0a0a !important;
+    }
+
+    @media (max-width: 1100px) {
+      .map-list-grid { grid-template-columns: 1fr !important; }
+      .map-card { height: 380px !important; }
+      .top-list-card { max-height: 600px !important; }
+      .dist-row { grid-template-columns: 1fr !important; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr) !important; }
+      .filter-bar-grid { flex-wrap: wrap !important; }
+    }
+    @media (max-width: 700px) {
+      .kpi-row { grid-template-columns: 1fr !important; }
+      .ptable th:nth-child(4), .ptable td:nth-child(4),
+      .ptable th:nth-child(7), .ptable td:nth-child(7),
+      .ptable th:nth-child(8), .ptable td:nth-child(8) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+const { useState, useEffect, useRef, useMemo } = React;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Design tokens
+// ─────────────────────────────────────────────────────────────────────────────
+const C = {
+  bg: '#0a0a0a',
+  bg2: '#141414',
+  card: 'rgba(255,255,255,0.025)',
+  cardHover: 'rgba(255,255,255,0.045)',
+  border: 'rgba(255,255,255,0.07)',
+  borderStrong: 'rgba(255,255,255,0.14)',
+  text: '#fff',
+  text2: 'rgba(255,255,255,0.65)',
+  text3: 'rgba(255,255,255,0.45)',
+  text4: 'rgba(255,255,255,0.28)',
+  green: '#22c55e',
+  greenSoft: 'rgba(34,197,94,0.15)',
+  greenBorder: 'rgba(34,197,94,0.35)',
+  yellow: '#fbbf24',
+  amber: '#f59e0b',
+  orange: '#fb923c',
+  red: '#ef4444',
+  blue: '#60a5fa',
+  purple: '#a78bfa',
+  pink: '#f472b6',
+};
+
+// Opportunity score → consistent palette (used in pins, list, table)
+const opportunityTier = (s) => {
+  if (s == null) return { tier: 'na',   color: C.text3,  bg: 'rgba(255,255,255,0.05)', label: '—' };
+  if (s >= 80)   return { tier: 'hot',  color: C.blue,   bg: 'rgba(96,165,250,0.15)',  label: 'Hot' };
+  if (s >= 60)   return { tier: 'high', color: C.green,  bg: C.greenSoft,              label: 'Alta' };
+  if (s >= 40)   return { tier: 'med',  color: C.amber,  bg: 'rgba(245,158,11,0.15)',  label: 'Media' };
+  return            { tier: 'low',  color: C.red,    bg: 'rgba(239,68,68,0.15)',   label: 'Baja' };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sample data — pizza-adjacent prospects in Bogotá
+// ─────────────────────────────────────────────────────────────────────────────
+const WEAKNESS_LABELS = {
+  no_logo:           'Sin logo',
+  no_main_image:     'Sin foto portada',
+  no_description:    'Sin descripción',
+  no_phone:          'Sin teléfono',
+  no_website:        'Sin sitio web',
+  no_hours:          'Sin horario',
+  unclaimed:         'Sin reclamar',
+  few_photos:        'Pocas fotos',
+  low_rating:        'Rating bajo',
+  few_reviews:       'Pocas reseñas',
+  no_menu:           'Sin menú online',
+  no_reservations:   'Sin reservas online',
+  no_attributes:     'Sin atributos',
+  closed_temporary:  'Cerrado temporal',
+  inconsistent_hrs:  'Horario inconsistente',
+};
+
+const CATEGORIES = [
+  'Pizzería', 'Restaurante italiano', 'Restaurante', 'Café', 'Heladería',
+  'Comida rápida', 'Hamburguesería', 'Restaurante mexicano', 'Sushi', 'Pastelería',
+];
+
+const NAMES = [
+  ['Pizza Spazio',           'Pizzería', 4.5, 312, 64, ['no_logo', 'no_main_image', 'no_menu']],
+  ['Bella Napoli',           'Pizzería', 4.1, 198, 71, ['no_website', 'no_logo', 'no_attributes', 'few_photos']],
+  ['Pizza Forno',            'Pizzería', 4.3, 245, 58, ['no_phone', 'no_main_image']],
+  ['El Pizzaiolo',           'Pizzería', 4.6, 145, 62, ['no_website', 'no_description']],
+  ['La Pizzería de Carlos',  'Pizzería', 3.9,  87, 78, ['unclaimed', 'no_website', 'no_main_image', 'few_reviews']],
+  ['Pizza Crust',            'Pizzería', 4.0, 412, 45, ['no_logo', 'no_menu']],
+  ['Hornero Pizza',          'Pizzería', 4.4,  64, 82, ['unclaimed', 'no_logo', 'no_main_image', 'no_reservations']],
+  ['Mamma Mia',              'Restaurante italiano', 4.2, 521, 51, ['no_main_image', 'no_menu']],
+  ['Trattoria Roma',         'Restaurante italiano', 4.5, 187, 38, ['no_description']],
+  ['Italia Express',         'Comida rápida',  3.7, 132, 67, ['no_logo', 'no_website', 'low_rating', 'no_attributes']],
+  ['Burger Loca',            'Hamburguesería', 4.3, 298, 54, ['no_menu', 'no_reservations']],
+  ['Smash Burger Co',        'Hamburguesería', 4.6, 421, 41, ['no_attributes']],
+  ['Patty Burger',           'Hamburguesería', 3.8, 78, 73, ['unclaimed', 'no_website', 'few_reviews', 'low_rating']],
+  ['Sushi Don',              'Sushi', 4.4, 234, 49, ['no_main_image', 'no_menu']],
+  ['Tokyo Roll',             'Sushi', 4.2, 156, 56, ['no_website', 'no_description']],
+  ['Pez Loco Sushi',         'Sushi', 3.9, 92,  68, ['unclaimed', 'no_logo', 'few_photos']],
+  ['Café del Norte',         'Café', 4.5, 312, 42, ['no_menu']],
+  ['Café Quinta Camacho',    'Café', 4.7, 178, 35, ['no_description']],
+  ['Aroma Coffee',           'Café', 4.0, 89, 69, ['unclaimed', 'no_website', 'few_reviews']],
+  ['Sweet Helado',           'Heladería', 4.4, 245, 47, ['no_main_image', 'no_reservations']],
+  ['Helados Tutti',          'Heladería', 4.6, 134, 53, ['no_website', 'no_logo']],
+  ['Frutos Helados',         'Heladería', 4.1, 67, 71, ['unclaimed', 'no_description', 'few_reviews']],
+  ['Taquería El Güero',      'Restaurante mexicano', 4.5, 189, 44, ['no_menu', 'no_attributes']],
+  ['Cantina La Loca',        'Restaurante mexicano', 4.3, 256, 51, ['no_main_image', 'no_description']],
+  ['Pastelería Doña Rosa',   'Pastelería', 4.7, 421, 36, ['no_website']],
+  ['Postres del Centro',     'Pastelería', 4.2, 98, 65, ['unclaimed', 'no_logo', 'no_phone']],
+  ['Bistro 1888',            'Restaurante', 4.4, 312, 48, ['no_main_image']],
+  ['La Cocina de Ana',       'Restaurante', 4.1, 165, 63, ['no_website', 'no_menu', 'no_description']],
+  ['Verde Vegano',           'Restaurante', 4.6, 145, 39, ['no_reservations']],
+  ['Casa del Sabor',         'Restaurante', 3.8, 203, 72, ['unclaimed', 'no_logo', 'low_rating', 'no_website']],
+];
+
+// Bogotá center area: Chapinero / Zona G / Usaquén
+const BOGOTA_CENTER = { lat: 4.6418, lng: -74.0648 };
+function jitterLatLng(seed) {
+  // Deterministic scatter within ~3km box around Chapinero
+  const s = seed * 9301 + 49297;
+  const a = ((s % 233280) / 233280 - 0.5) * 0.04;   // ~4km
+  const b = (((s * 7) % 233280) / 233280 - 0.5) * 0.04;
+  return { lat: BOGOTA_CENTER.lat + a, lng: BOGOTA_CENTER.lng + b };
+}
+
+const CITIES = ['Bogotá · Chapinero', 'Bogotá · Usaquén', 'Bogotá · Zona G', 'Bogotá · Quinta Camacho', 'Bogotá · Zona T'];
+
+const PROSPECTS = NAMES.map(([name, category, rating, votes, score, weaknesses], i) => {
+  const { lat, lng } = jitterLatLng(i + 1);
+  const claimed = !weaknesses.includes('unclaimed');
+  const hasWebsite = !weaknesses.includes('no_website');
+  const hasPhone = !weaknesses.includes('no_phone');
+  return {
+    name,
+    category: { primary: category, ids: [] },
+    contact: {
+      phone: hasPhone ? `+57 1 ${4000000 + i * 13841}`.slice(0, 14) : null,
+      website_url: hasWebsite ? `https://${name.toLowerCase().replace(/[^a-z0-9]+/g, '')}.co` : null,
+    },
+    location: {
+      city: CITIES[i % CITIES.length],
+      latitude: lat,
+      longitude: lng,
+      address: `Carrera ${10 + (i % 13)} #${20 + ((i * 7) % 60)}-${10 + ((i * 3) % 50)}`,
+    },
+    media: { main_image_url: null, total_photos: 20 + (i * 13) % 80 },
+    status: {
+      is_claimed: claimed,
+      operating_status: i === 3 ? 'closed_temporarily' : i === 14 ? 'closed_permanently' : 'open',
+      price_level: ['inexpensive', 'moderate', 'expensive'][i % 3],
+    },
+    reviews: { rating: { value: rating, votes_count: votes } },
+    profile_completeness: {
+      score: 100 - weaknesses.length * 11,
+      missing: weaknesses.map(w => ({ field: w, label: WEAKNESS_LABELS[w] || w })),
+    },
+    opportunity_score: { score, weakness_signals: weaknesses },
+  };
+});
+
+// Build result object
+const sampleResult = {
+  items_count: PROSPECTS.length,
+  total_count: 247,
+  prospects: [...PROSPECTS].sort((a, b) => b.opportunity_score.score - a.opportunity_score.score),
+  high_opportunity: [...PROSPECTS].filter(p => p.opportunity_score.score >= 60).sort((a, b) => b.opportunity_score.score - a.opportunity_score.score),
+  high_opportunity_count: PROSPECTS.filter(p => p.opportunity_score.score >= 60).length,
+  unclaimed_count: PROSPECTS.filter(p => !p.status.is_claimed).length,
+  unclaimed_pct: PROSPECTS.filter(p => !p.status.is_claimed).length / PROSPECTS.length * 100,
+  no_website_count: PROSPECTS.filter(p => !p.contact.website_url).length,
+  no_website_pct: PROSPECTS.filter(p => !p.contact.website_url).length / PROSPECTS.length * 100,
+  operating_status_distribution: PROSPECTS.reduce((acc, p) => {
+    acc[p.status.operating_status] = (acc[p.status.operating_status] || 0) + 1;
+    return acc;
+  }, {}),
+  top_categories: (() => {
+    const counts = {};
+    PROSPECTS.forEach(p => { counts[p.category.primary] = (counts[p.category.primary] || 0) + 1; });
+    return Object.entries(counts).map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count);
+  })(),
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Icons
+// ─────────────────────────────────────────────────────────────────────────────
+const Icon = ({ size = 16, sw = 1.6, fill = 'none', children, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor"
+       strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, ...style }}>
+    {children}
+  </svg>
+);
+const IconSearch    = (p) => <Icon {...p}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Icon>;
+const IconFilter    = (p) => <Icon {...p}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></Icon>;
+const IconMap       = (p) => <Icon {...p}><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></Icon>;
+const IconPin       = (p) => <Icon {...p}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></Icon>;
+const IconStar      = (p) => <Icon {...p} fill="currentColor" sw={0}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></Icon>;
+const IconCheck     = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 9.5"/></Icon>;
+const IconXCircle   = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></Icon>;
+const IconX         = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Icon>;
+const IconPlus      = (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Icon>;
+const IconFire      = (p) => <Icon {...p}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" fill="currentColor" fillOpacity="0.15"/></Icon>;
+const IconZap       = (p) => <Icon {...p}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></Icon>;
+const IconGlobe     = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></Icon>;
+const IconShield    = (p) => <Icon {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></Icon>;
+const IconMessage   = (p) => <Icon {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></Icon>;
+const IconArrowUp   = (p) => <Icon {...p}><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></Icon>;
+const IconArrowDown = (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></Icon>;
+const IconPhone     = (p) => <Icon {...p}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></Icon>;
+const IconExternal  = (p) => <Icon {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></Icon>;
+const IconChevDown  = (p) => <Icon {...p}><polyline points="6 9 12 15 18 9"/></Icon>;
+const IconCamera    = (p) => <Icon {...p}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></Icon>;
+const IconLayers    = (p) => <Icon {...p}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></Icon>;
+const IconClock     = (p) => <Icon {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></Icon>;
+const IconUsers     = (p) => <Icon {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></Icon>;
+const IconCheckSm   = (p) => <Icon {...p}><polyline points="20 6 9 17 4 12"/></Icon>;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Primitives
+// ─────────────────────────────────────────────────────────────────────────────
+function Card({ children, style, ...rest }) {
+  return (
+    <div style={{
+      background: C.card,
+      border: `1px solid ${C.border}`,
+      borderRadius: 16,
+      ...style,
+    }} {...rest}>{children}</div>
+  );
+}
+function Badge({ children, color, bg, style, title }) {
+  return (
+    <span title={title} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      background: bg || `${color}15`, color,
+      border: `1px solid ${color}40`,
+      fontSize: 11, fontWeight: 600,
+      padding: '2px 8px', borderRadius: 999,
+      letterSpacing: '0.01em', whiteSpace: 'nowrap',
+      ...style,
+    }}>{children}</span>
+  );
+}
+function Stars({ value, size = 12 }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+      <span style={{ color: C.yellow, display: 'inline-flex' }}><IconStar size={size}/></span>
+      <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: size + 1, color: C.text, fontWeight: 600 }}>
+        {value.toFixed(1)}
+      </span>
+    </span>
+  );
+}
+
+// Score badge with tier-consistent palette
+function ScoreBadge({ score, size = 'md', style }) {
+  const t = opportunityTier(score);
+  const dim = { sm: { px: 10, py: 4, fs: 13 }, md: { px: 12, py: 5, fs: 15 }, lg: { px: 14, py: 6, fs: 18 } }[size];
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      background: t.bg, color: t.color,
+      border: `1px solid ${t.color}40`,
+      fontFamily: 'Syne, sans-serif', fontWeight: 800,
+      padding: `${dim.py}px ${dim.px}px`,
+      borderRadius: 9, fontSize: dim.fs,
+      letterSpacing: '-0.01em',
+      fontVariantNumeric: 'tabular-nums',
+      ...style,
+    }}>
+      {score >= 80 && <IconFire size={dim.fs - 2}/>}
+      {score}
+    </span>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filter Bar (sticky)
+// ─────────────────────────────────────────────────────────────────────────────
+function FilterBar({ filters, setFilters, totalCount }) {
+  const [catOpen, setCatOpen] = useState(false);
+  const [catSearch, setCatSearch] = useState('');
+  const catRef = useRef(null);
+
+  useEffect(() => {
+    if (!catOpen) return;
+    const onClick = (e) => { if (!catRef.current?.contains(e.target)) setCatOpen(false); };
+    window.addEventListener('mousedown', onClick);
+    return () => window.removeEventListener('mousedown', onClick);
+  }, [catOpen]);
+
+  const visibleCats = CATEGORIES.filter(c => c.toLowerCase().includes(catSearch.toLowerCase()));
+
+  const toggleCat = (c) => {
+    setFilters(f => ({ ...f, categories: f.categories.includes(c) ? f.categories.filter(x => x !== c) : [...f.categories, c] }));
+  };
+  const update = (k, v) => setFilters(f => ({ ...f, [k]: v }));
+  const reset = () => setFilters({
+    categories: [], location: '', unclaimed_only: false,
+    min_rating: 0, min_reviews: 0,
+  });
+
+  const hasFilters = filters.categories.length > 0 || filters.location || filters.unclaimed_only || filters.min_rating > 0 || filters.min_reviews > 0;
+
+  return (
+    <Card style={{
+      padding: '14px 16px', marginBottom: 24,
+      position: 'sticky', top: 16, zIndex: 30,
+      background: 'rgba(20,20,20,0.92)',
+      backdropFilter: 'blur(16px)',
+      border: `1px solid ${C.borderStrong}`,
+    }}>
+      <div className="filter-bar-grid" style={{
+        display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
+      }}>
+        {/* Categories multi-select */}
+        <div ref={catRef} style={{ position: 'relative', flex: '1 1 220px', minWidth: 220 }}>
+          <button onClick={() => setCatOpen(o => !o)} style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+            padding: '8px 12px', borderRadius: 9,
+            background: filters.categories.length ? C.greenSoft : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${filters.categories.length ? C.greenBorder : C.border}`,
+            color: filters.categories.length ? C.green : C.text2,
+            fontSize: 13, fontWeight: 500, cursor: 'pointer', textAlign: 'left',
+          }}>
+            <IconLayers size={13}/>
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {filters.categories.length === 0 ? 'Todas las categorías' :
+               filters.categories.length === 1 ? filters.categories[0] :
+               `${filters.categories.length} categorías`}
+            </span>
+            <IconChevDown size={12} style={{ transform: catOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}/>
+          </button>
+          {catOpen && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 50,
+              background: '#141414', border: `1px solid ${C.borderStrong}`,
+              borderRadius: 10, padding: 8, maxHeight: 320, overflowY: 'auto',
+              boxShadow: '0 12px 36px rgba(0,0,0,0.5)',
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '6px 10px', marginBottom: 6,
+                background: 'rgba(255,255,255,0.04)',
+                borderRadius: 7, border: `1px solid ${C.border}`,
+              }}>
+                <IconSearch size={12} style={{ color: C.text3 }}/>
+                <input autoFocus value={catSearch} onChange={e => setCatSearch(e.target.value)}
+                  placeholder="Buscar categoría..."
+                  style={{ flex: 1, fontSize: 12.5, color: C.text }}/>
+              </div>
+              {visibleCats.map(c => (
+                <button key={c} onClick={() => toggleCat(c)} style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '7px 10px', borderRadius: 6,
+                  background: filters.categories.includes(c) ? 'rgba(34,197,94,0.1)' : 'transparent',
+                  border: 'none', color: C.text, fontSize: 13,
+                  cursor: 'pointer', textAlign: 'left', fontFamily: 'Inter',
+                }}>
+                  <span style={{
+                    width: 14, height: 14, borderRadius: 4,
+                    border: `1.5px solid ${filters.categories.includes(c) ? C.green : C.borderStrong}`,
+                    background: filters.categories.includes(c) ? C.green : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: C.bg, flexShrink: 0,
+                  }}>{filters.categories.includes(c) && <IconCheckSm size={9} sw={3}/>}</span>
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Location input */}
+        <div style={{
+          flex: '1 1 240px', minWidth: 200,
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', borderRadius: 9,
+          background: 'rgba(255,255,255,0.04)',
+          border: `1px solid ${C.border}`,
+        }}>
+          <IconPin size={13} style={{ color: C.text3 }}/>
+          <input value={filters.location} onChange={e => update('location', e.target.value)}
+            placeholder="lat, lng, radio_km — ej: 4.6418, -74.0648, 3"
+            style={{ flex: 1, fontSize: 13, color: C.text, minWidth: 0 }}/>
+          <button title="Usar mapa" style={{
+            background: 'rgba(34,197,94,0.1)', border: `1px solid ${C.greenBorder}`,
+            color: C.green, padding: '4px 8px', borderRadius: 6,
+            fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+          }}><IconMap size={11}/> mapa</button>
+        </div>
+
+        {/* Unclaimed toggle */}
+        <button onClick={() => update('unclaimed_only', !filters.unclaimed_only)}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            padding: '8px 12px', borderRadius: 9,
+            background: filters.unclaimed_only ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.04)',
+            border: `1px solid ${filters.unclaimed_only ? 'rgba(239,68,68,0.35)' : C.border}`,
+            color: filters.unclaimed_only ? C.red : C.text2,
+            fontSize: 13, fontWeight: 500, cursor: 'pointer',
+          }}>
+          <span style={{
+            width: 14, height: 14, borderRadius: 4,
+            border: `1.5px solid ${filters.unclaimed_only ? C.red : C.borderStrong}`,
+            background: filters.unclaimed_only ? C.red : 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: C.bg,
+          }}>{filters.unclaimed_only && <IconCheckSm size={9} sw={3}/>}</span>
+          Solo no reclamados
+        </button>
+
+        {/* Min rating slider */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 12px', borderRadius: 9,
+          background: 'rgba(255,255,255,0.04)',
+          border: `1px solid ${C.border}`, minWidth: 200,
+        }}>
+          <span style={{ color: C.yellow }}><IconStar size={13}/></span>
+          <span style={{ fontSize: 12, color: C.text3 }}>Min</span>
+          <input type="range" min="0" max="5" step="0.1"
+            value={filters.min_rating}
+            onChange={e => update('min_rating', +e.target.value)}
+            style={{ flex: 1, accentColor: C.green }}/>
+          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: C.text, fontWeight: 600, minWidth: 28, textAlign: 'right' }}>
+            {filters.min_rating.toFixed(1)}
+          </span>
+        </div>
+
+        {/* Min reviews */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '8px 12px', borderRadius: 9,
+          background: 'rgba(255,255,255,0.04)',
+          border: `1px solid ${C.border}`,
+        }}>
+          <IconUsers size={13} style={{ color: C.text3 }}/>
+          <span style={{ fontSize: 12, color: C.text3 }}>Min reseñas</span>
+          <input type="number" value={filters.min_reviews || ''}
+            onChange={e => update('min_reviews', +e.target.value || 0)}
+            placeholder="0" min="0"
+            style={{
+              width: 60, fontSize: 12, color: C.text,
+              fontFamily: 'JetBrains Mono, monospace', textAlign: 'right',
+            }}/>
+        </div>
+
+        {/* Apply (this demo applies live) + Reset */}
+        {hasFilters && (
+          <button onClick={reset} style={{
+            background: 'transparent', border: `1px solid ${C.border}`,
+            color: C.text3, fontSize: 12, padding: '8px 12px', borderRadius: 9,
+            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+          }}>
+            <IconX size={12}/> Limpiar
+          </button>
+        )}
+        <div style={{ flex: 1 }}/>
+        <button style={{
+          background: C.green, color: C.bg, border: 'none',
+          padding: '9px 18px', borderRadius: 9,
+          fontSize: 13, fontWeight: 700, cursor: 'pointer',
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 6px 18px ${C.green}40`; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
+          <IconSearch size={13}/> Buscar
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KPI row
+// ─────────────────────────────────────────────────────────────────────────────
+function KpiCard({ icon, label, value, sub, accent, accentColor }) {
+  const ac = accentColor || C.green;
+  return (
+    <Card style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 130 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: 10,
+          background: accent ? `${ac}22` : 'rgba(255,255,255,0.06)',
+          color: accent ? ac : C.text2,
+          border: `1px solid ${accent ? `${ac}50` : C.border}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>{icon}</div>
+        <div style={{
+          fontSize: 10.5, color: C.text3, letterSpacing: '0.07em',
+          textTransform: 'uppercase', fontWeight: 600, textAlign: 'right',
+        }}>{label}</div>
+      </div>
+      <div style={{ marginTop: 'auto' }}>
+        <div style={{
+          fontFamily: 'Syne, sans-serif', fontWeight: 800,
+          fontSize: 34, lineHeight: 1,
+          color: accent ? ac : C.text,
+          letterSpacing: '-0.025em',
+          fontVariantNumeric: 'tabular-nums',
+        }}>{value}</div>
+        {sub && <div style={{ fontSize: 12, color: C.text3, marginTop: 6 }}>{sub}</div>}
+      </div>
+    </Card>
+  );
+}
+
+function KpiRow({ result }) {
+  return (
+    <div className="kpi-row" style={{
+      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+      gap: 16, marginBottom: 24,
+    }}>
+      <KpiCard
+        icon={<IconSearch size={17}/>}
+        label="Prospectos encontrados"
+        value={result.items_count}
+        sub={`de ${result.total_count.toLocaleString('es-CO')} en la zona`}
+      />
+      <KpiCard
+        icon={<IconShield size={17}/>}
+        label="No reclamados"
+        value={result.unclaimed_count}
+        sub={
+          <span>
+            <strong style={{ color: C.red, fontFamily: 'JetBrains Mono, monospace' }}>
+              {result.unclaimed_pct.toFixed(0)}%
+            </strong> del total · oportunidad
+          </span>
+        }
+        accent accentColor={C.red}
+      />
+      <KpiCard
+        icon={<IconGlobe size={17}/>}
+        label="Sin sitio web"
+        value={result.no_website_count}
+        sub={
+          <span>
+            <strong style={{ color: C.amber, fontFamily: 'JetBrains Mono, monospace' }}>
+              {result.no_website_pct.toFixed(0)}%
+            </strong> del total
+          </span>
+        }
+        accent accentColor={C.amber}
+      />
+      <KpiCard
+        icon={<IconFire size={17}/>}
+        label="Alta oportunidad"
+        value={result.high_opportunity_count}
+        sub={
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Badge color={C.green} style={{ fontFamily: 'JetBrains Mono, monospace' }}>Score ≥ 60</Badge>
+          </span>
+        }
+        accent accentColor={C.green}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Map
+// ─────────────────────────────────────────────────────────────────────────────
+function ProspectsMap({ prospects, onProspectClick }) {
+  const divRef = useRef(null);
+  const mapRef = useRef(null);
+  const layerRef = useRef(null);
+
+  useEffect(() => {
+    if (!divRef.current || mapRef.current || !window.L) return;
+    const L = window.L;
+    mapRef.current = L.map(divRef.current, {
+      center: [BOGOTA_CENTER.lat, BOGOTA_CENTER.lng],
+      zoom: 14,
+      scrollWheelZoom: false,
+      zoomControl: true,
+    });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19, subdomains: 'abcd', attribution: '© OpenStreetMap, © CARTO',
+    }).addTo(mapRef.current);
+    return () => { if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; } };
+  }, []);
+
+  useEffect(() => {
+    const L = window.L;
+    if (!mapRef.current || !L) return;
+    if (layerRef.current) { mapRef.current.removeLayer(layerRef.current); layerRef.current = null; }
+
+    const cluster = L.markerClusterGroup
+      ? L.markerClusterGroup({ maxClusterRadius: 50, disableClusteringAtZoom: 17 })
+      : L.featureGroup();
+
+    prospects.forEach(p => {
+      const t = opportunityTier(p.opportunity_score.score);
+      const size = 28 + Math.min(p.opportunity_score.score / 4, 14);
+      const html = `
+        <div class="prospect-pin" style="
+          width: ${size}px; height: ${size}px;
+          background: ${t.color};
+          ${p.opportunity_score.score >= 80 ? `box-shadow: 0 2px 12px ${t.color}55, 0 0 0 6px ${t.color}22;` : ''}
+        ">${p.opportunity_score.score}</div>`;
+      const icon = L.divIcon({ className: '', html, iconSize: [size, size], iconAnchor: [size / 2, size / 2] });
+      const marker = L.marker([p.location.latitude, p.location.longitude], { icon });
+      marker.bindPopup(`
+        <div style="font-family: Inter, sans-serif;">
+          <div style="font-family: Syne, sans-serif; font-weight: 700; font-size: 14px; color: #fff; margin-bottom: 3px;">${p.name}</div>
+          <div style="font-size: 11.5px; color: rgba(255,255,255,0.5); margin-bottom: 8px;">${p.category.primary} · ${p.location.city}</div>
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="
+              background: ${t.bg}; color: ${t.color};
+              border: 1px solid ${t.color}55;
+              padding: 3px 10px; border-radius: 8px;
+              font-family: Syne; font-weight: 800; font-size: 13px;
+            ">${p.opportunity_score.score} · ${t.label}</span>
+            <span style="font-size: 12px; color: #fbbf24;">★ ${p.reviews.rating.value.toFixed(1)}</span>
+          </div>
+          <button onclick="window.__edaProspectClick && window.__edaProspectClick('${p.name.replace(/'/g, "\\'")}')" style="
+            background: #22c55e; color: #0a0a0a;
+            border: none; padding: 6px 12px; border-radius: 7px;
+            font-family: Inter; font-weight: 700; font-size: 12px;
+            cursor: pointer;
+          ">Ver detalles →</button>
+        </div>
+      `);
+      cluster.addLayer(marker);
+    });
+
+    mapRef.current.addLayer(cluster);
+    layerRef.current = cluster;
+  }, [prospects]);
+
+  useEffect(() => {
+    window.__edaProspectClick = (name) => {
+      const p = prospects.find(x => x.name === name);
+      if (p) onProspectClick(p);
+    };
+    return () => { delete window.__edaProspectClick; };
+  }, [prospects, onProspectClick]);
+
+  return (
+    <Card className="map-card" style={{ padding: 0, overflow: 'hidden', height: 520, display: 'flex', flexDirection: 'column' }}>
+      <div style={{
+        padding: '14px 18px', borderBottom: `1px solid ${C.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
+        flexWrap: 'wrap',
+      }}>
+        <div>
+          <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 16, marginBottom: 2 }}>
+            Mapa de prospectos
+          </div>
+          <div style={{ fontSize: 13, color: C.text2 }}>
+            {prospects.length} negocios geolocalizados — clic en pin para ver detalles
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          {[
+            { label: 'Hot', score: 80, color: C.blue },
+            { label: 'Alta', score: 60, color: C.green },
+            { label: 'Media', score: 40, color: C.amber },
+            { label: 'Baja', score: 0,  color: C.red },
+          ].map(l => (
+            <div key={l.label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.text3 }}>
+              <span style={{
+                width: 10, height: 10, borderRadius: '50%',
+                background: l.color, border: '1px solid rgba(0,0,0,0.3)',
+                boxShadow: `0 0 6px ${l.color}55`,
+              }}/>
+              {l.label}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div ref={divRef} style={{ flex: 1 }}/>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Top 20 list
+// ─────────────────────────────────────────────────────────────────────────────
+function Thumbnail({ name, size = 40, hasImage = false, imageUrl }) {
+  if (hasImage && imageUrl) {
+    return <img src={imageUrl} alt="" style={{ width: size, height: size, objectFit: 'cover', borderRadius: 9 }}/>;
+  }
+  // Generate a deterministic gradient based on name
+  const hash = [...name].reduce((s, c) => s + c.charCodeAt(0), 0);
+  const palette = [C.green, C.blue, C.purple, C.orange, C.pink, C.amber];
+  const c1 = palette[hash % palette.length];
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: 9,
+      background: `linear-gradient(135deg, ${c1}55, ${c1}22), #1a1a1a`,
+      border: `1px solid ${c1}40`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: 'Syne', fontWeight: 800, color: c1, fontSize: size * 0.42,
+      letterSpacing: '-0.04em', flexShrink: 0,
+    }}>{name.charAt(0).toUpperCase()}</div>
+  );
+}
+
+function TopOpportunityList({ prospects, onProspectClick, onGenerateOutreach }) {
+  return (
+    <Card className="top-list-card" style={{
+      padding: 0, height: 520, display: 'flex', flexDirection: 'column',
+    }}>
+      <div style={{
+        padding: '14px 18px', borderBottom: `1px solid ${C.border}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+      }}>
+        <div>
+          <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 16, marginBottom: 2 }}>
+            Top oportunidades
+          </div>
+          <div style={{ fontSize: 13, color: C.text2 }}>
+            Score ≥ 60 — empieza por aquí
+          </div>
+        </div>
+        <Badge color={C.green} style={{ fontSize: 12, padding: '4px 10px' }}>
+          <IconFire size={11}/> {prospects.length}
+        </Badge>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+        {prospects.slice(0, 20).map((p, i) => {
+          const t = opportunityTier(p.opportunity_score.score);
+          const weaknesses = p.opportunity_score.weakness_signals.slice(0, 3);
+          return (
+            <div key={p.name} onClick={() => onProspectClick(p)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 14px', borderRadius: 10,
+                cursor: 'pointer', transition: 'all 0.12s',
+                marginBottom: 4,
+                animation: `fadeUp 0.3s ${i * 0.03}s ease both`,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}>
+              <div style={{
+                fontFamily: 'JetBrains Mono, monospace', fontSize: 10,
+                color: t.color, fontWeight: 700, width: 18, textAlign: 'right',
+              }}>{i + 1}</div>
+
+              <Thumbnail name={p.name} hasImage={!!p.media.main_image_url} imageUrl={p.media.main_image_url}/>
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 13.5, color: C.text, fontWeight: 600, marginBottom: 3,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{p.name}</div>
+                <div style={{
+                  fontSize: 11, color: C.text3, display: 'flex', gap: 8, alignItems: 'center',
+                  flexWrap: 'wrap',
+                }}>
+                  <span>{p.category.primary}</span>
+                  <span style={{ color: C.text4 }}>·</span>
+                  <Stars value={p.reviews.rating.value} size={10}/>
+                  <span style={{ color: C.text4, fontFamily: 'JetBrains Mono, monospace' }}>
+                    ({p.reviews.rating.votes_count})
+                  </span>
+                </div>
+                {weaknesses.length > 0 && (
+                  <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                    {weaknesses.map(w => (
+                      <span key={w} style={{
+                        fontSize: 9.5, color: C.text2, fontWeight: 500,
+                        padding: '2px 6px', borderRadius: 4,
+                        background: 'rgba(255,255,255,0.04)',
+                        border: `1px solid ${C.border}`,
+                      }}>{WEAKNESS_LABELS[w] || w}</span>
+                    ))}
+                    {p.opportunity_score.weakness_signals.length > 3 && (
+                      <span style={{
+                        fontSize: 9.5, color: C.text3, fontWeight: 500,
+                        padding: '2px 6px',
+                      }}>+{p.opportunity_score.weakness_signals.length - 3}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <ScoreBadge score={p.opportunity_score.score} size="sm" style={{ flexShrink: 0 }}/>
+
+              <button onClick={(e) => { e.stopPropagation(); onGenerateOutreach(p); }}
+                title="Generar outreach" style={{
+                  width: 30, height: 30, borderRadius: 8,
+                  background: C.greenSoft, border: `1px solid ${C.greenBorder}`,
+                  color: C.green, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = C.green; e.currentTarget.style.color = C.bg; }}
+                onMouseLeave={e => { e.currentTarget.style.background = C.greenSoft; e.currentTarget.style.color = C.green; }}>
+                <IconMessage size={13}/>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Distribution row: treemap + donut
+// ─────────────────────────────────────────────────────────────────────────────
+function squarify(values, width, height) {
+  if (!values.length) return [];
+  const total = values.reduce((s, v) => s + v.value, 0);
+  if (total <= 0) return [];
+  const items = values.map(v => ({ ...v, area: v.value / total * width * height }));
+  items.sort((a, b) => b.area - a.area);
+  const result = [];
+  let x = 0, y = 0, w = width, h = height;
+  let i = 0;
+  while (i < items.length) {
+    const remaining = items.slice(i);
+    const horizontal = w >= h;
+    const side = horizontal ? h : w;
+    let row = [];
+    const worst = (r, s) => {
+      const sum = r.reduce((a, b) => a + b.area, 0);
+      const max = Math.max(...r.map(x => x.area));
+      const min = Math.min(...r.map(x => x.area));
+      const s2 = s * s, sum2 = sum * sum;
+      return Math.max((s2 * max) / sum2, sum2 / (s2 * min));
+    };
+    for (const it of remaining) {
+      const cand = [...row, it];
+      if (row.length === 0 || worst(cand, side) < worst(row, side)) row = cand;
+      else break;
+    }
+    const rowSum = row.reduce((a, b) => a + b.area, 0);
+    const thick = rowSum / side;
+    let cursor = horizontal ? y : x;
+    for (const it of row) {
+      const len = it.area / thick;
+      result.push({ ...it, x: horizontal ? x : cursor, y: horizontal ? cursor : y, w: horizontal ? thick : len, h: horizontal ? len : thick });
+      cursor += len;
+    }
+    if (horizontal) { x += thick; w -= thick; } else { y += thick; h -= thick; }
+    i += row.length;
+  }
+  return result;
+}
+
+function CategoriesTreemap({ categories }) {
+  const wrapRef = useRef(null);
+  const [size, setSize] = useState({ w: 600, h: 280 });
+  const palette = [C.green, '#4ade80', C.blue, C.purple, C.amber, C.orange, C.pink, '#34d399'];
+
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    const ro = new ResizeObserver(() => {
+      const r = wrapRef.current.getBoundingClientRect();
+      setSize({ w: Math.max(280, r.width), h: 280 });
+    });
+    ro.observe(wrapRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  const values = categories.map((c, i) => ({ label: c.category, value: c.count, color: palette[i % palette.length] }));
+  const rects = useMemo(() => squarify(values, size.w, size.h), [values, size.w, size.h]);
+  const total = values.reduce((s, v) => s + v.value, 0);
+
+  return (
+    <Card style={{ padding: 24 }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 16, marginBottom: 2 }}>Categorías</div>
+        <h3 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: C.text, letterSpacing: '-0.01em' }}>
+          Tipos de negocio en la zona
+        </h3>
+      </div>
+      <div ref={wrapRef} style={{ width: '100%' }}>
+        <svg width={size.w} height={size.h} style={{ display: 'block' }}>
+          {rects.map((r, i) => {
+            const pct = (r.value / total) * 100;
+            const showLabel = r.w > 75 && r.h > 36;
+            return (
+              <g key={i}>
+                <rect x={r.x + 2} y={r.y + 2} width={Math.max(0, r.w - 4)} height={Math.max(0, r.h - 4)}
+                  rx={9} fill={r.color} fillOpacity={0.2}
+                  stroke={r.color} strokeOpacity={0.45} strokeWidth={1}/>
+                {showLabel ? (
+                  <>
+                    <text x={r.x + 14} y={r.y + 26} fontSize="12.5" fontFamily="Inter" fontWeight="600" fill={C.text}>
+                      {r.label}
+                    </text>
+                    <text x={r.x + 14} y={r.y + 50} fontSize="22" fontFamily="Syne" fontWeight="800" fill={r.color}>
+                      {r.value}
+                    </text>
+                    <text x={r.x + 14} y={r.y + 68} fontSize="10.5" fontFamily="JetBrains Mono, monospace" fill={C.text3}>
+                      {pct.toFixed(0)}%
+                    </text>
+                  </>
+                ) : r.w > 30 && r.h > 30 && (
+                  <text x={r.x + r.w / 2} y={r.y + r.h / 2 + 4} fontSize="13"
+                    fontFamily="Syne" fontWeight="700" fill={C.text} textAnchor="middle">
+                    {r.value}
+                  </text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </Card>
+  );
+}
+
+const STATUS_META = {
+  open:                { label: 'Abierto',             color: C.green },
+  closed_temporarily:  { label: 'Cerrado temporal',    color: C.amber },
+  closed_permanently:  { label: 'Cerrado permanente',  color: C.red },
+  unknown:             { label: 'Desconocido',         color: C.text3 },
+};
+
+function OperatingStatusDonut({ dist }) {
+  const [hover, setHover] = useState(null);
+  const entries = Object.entries(dist)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => ({ key: k, value: v, ...(STATUS_META[k] || { label: k, color: C.text3 }) }));
+  const total = entries.reduce((s, e) => s + e.value, 0);
+  const cx = 90, cy = 90, r = 72, ir = 48;
+  let angle = -Math.PI / 2;
+  const arcs = entries.map(e => {
+    const a0 = angle, a1 = angle + (e.value / total) * Math.PI * 2;
+    angle = a1;
+    const lg = a1 - a0 > Math.PI ? 1 : 0;
+    const x0 = cx + Math.cos(a0) * r, y0 = cy + Math.sin(a0) * r;
+    const x1 = cx + Math.cos(a1) * r, y1 = cy + Math.sin(a1) * r;
+    const xi0 = cx + Math.cos(a0) * ir, yi0 = cy + Math.sin(a0) * ir;
+    const xi1 = cx + Math.cos(a1) * ir, yi1 = cy + Math.sin(a1) * ir;
+    return { ...e, d: `M ${x0} ${y0} A ${r} ${r} 0 ${lg} 1 ${x1} ${y1} L ${xi1} ${yi1} A ${ir} ${ir} 0 ${lg} 0 ${xi0} ${yi0} Z` };
+  });
+  const cur = hover != null ? entries[hover] : null;
+  return (
+    <Card style={{ padding: 24, height: '100%' }}>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 16, marginBottom: 2 }}>Operación</div>
+        <h3 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: C.text, letterSpacing: '-0.01em' }}>
+          Estado operativo
+        </h3>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', width: 180, height: 180, flexShrink: 0 }}>
+          <svg width="180" height="180" viewBox="0 0 180 180">
+            {arcs.map((a, i) => (
+              <path key={a.key} d={a.d} fill={a.color}
+                fillOpacity={hover == null || hover === i ? 1 : 0.25}
+                stroke={C.bg} strokeWidth="2"
+                onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}
+                style={{ cursor: 'pointer', transition: 'fill-opacity 0.15s' }}/>
+            ))}
+          </svg>
+          <div style={{
+            position: 'absolute', inset: 0,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            pointerEvents: 'none',
+          }}>
+            <div style={{ fontSize: 11, color: C.text3, fontWeight: 500 }}>{cur?.label || 'Total'}</div>
+            <div style={{ fontFamily: 'Syne', fontWeight: 800, fontSize: 30, color: cur?.color || C.text }}>
+              {cur?.value ?? total}
+            </div>
+          </div>
+        </div>
+        <div style={{ flex: 1, minWidth: 140, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {entries.map((e, i) => (
+            <div key={e.key}
+              onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(null)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '8px 10px', borderRadius: 8,
+                background: hover === i ? 'rgba(255,255,255,0.04)' : 'transparent',
+              }}>
+              <span style={{ width: 10, height: 10, borderRadius: 3, background: e.color }}/>
+              <span style={{ flex: 1, fontSize: 12.5, color: C.text2, fontWeight: 500 }}>{e.label}</span>
+              <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: C.text, fontWeight: 600 }}>
+                {e.value}
+              </span>
+              <span style={{ fontSize: 11, color: C.text3, minWidth: 36, textAlign: 'right' }}>
+                {((e.value / total) * 100).toFixed(0)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Prospects table
+// ─────────────────────────────────────────────────────────────────────────────
+function ProspectsTable({ prospects, selected, setSelected, onProspectClick, onGenerateOutreach }) {
+  const [sort, setSort] = useState({ key: 'opportunity_score', dir: 'desc' });
+
+  const sorted = useMemo(() => {
+    const arr = [...prospects];
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    arr.sort((a, b) => {
+      let va, vb;
+      if (sort.key === 'name') { va = a.name; vb = b.name; }
+      else if (sort.key === 'rating') { va = a.reviews.rating.value; vb = b.reviews.rating.value; }
+      else if (sort.key === 'opportunity_score') { va = a.opportunity_score.score; vb = b.opportunity_score.score; }
+      if (typeof va === 'string') return va.localeCompare(vb) * dir;
+      return (va - vb) * dir;
+    });
+    return arr;
+  }, [prospects, sort]);
+
+  const toggleSort = (key) => setSort(s => s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' });
+  const toggleSelected = (name) => {
+    setSelected(s => s.includes(name) ? s.filter(x => x !== name) : [...s, name]);
+  };
+  const allSelected = sorted.length > 0 && sorted.every(p => selected.includes(p.name));
+  const someSelected = !allSelected && sorted.some(p => selected.includes(p.name));
+  const toggleAll = () => {
+    if (allSelected) setSelected([]);
+    else setSelected(sorted.map(p => p.name));
+  };
+
+  const SortHead = ({ k, children, w, align }) => (
+    <th style={{
+      textAlign: align || 'left', width: w,
+      padding: '14px 16px', fontSize: 10.5,
+      fontWeight: 600, color: C.text3,
+      letterSpacing: '0.07em', textTransform: 'uppercase',
+      borderBottom: `1px solid ${C.border}`,
+      cursor: k ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap',
+      background: 'rgba(255,255,255,0.02)',
+      position: 'sticky', top: 0, zIndex: 1,
+    }} onClick={k ? () => toggleSort(k) : undefined}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+        {children}
+        {k && sort.key === k && (sort.dir === 'asc' ? <IconArrowUp size={11}/> : <IconArrowDown size={11}/>)}
+      </span>
+    </th>
+  );
+
+  return (
+    <Card style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ padding: '18px 22px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 14 }}>
+        <div>
+          <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 16, marginBottom: 2 }}>Tabla maestra</div>
+          <h3 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 18, color: C.text, letterSpacing: '-0.01em' }}>
+            Todos los prospectos · {prospects.length}
+          </h3>
+        </div>
+        {selected.length > 0 && (
+          <Badge color={C.green} style={{ fontSize: 12, padding: '5px 12px' }}>
+            <IconCheckSm size={12} sw={2.5}/> {selected.length} seleccionados
+          </Badge>
+        )}
+      </div>
+
+      <div style={{ overflowX: 'auto', maxHeight: 600 }}>
+        <table className="ptable" style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
+          <thead>
+            <tr>
+              <th style={{
+                width: 40, padding: '14px 12px',
+                borderBottom: `1px solid ${C.border}`,
+                background: 'rgba(255,255,255,0.02)',
+                position: 'sticky', top: 0, zIndex: 1,
+              }}>
+                <button onClick={toggleAll}
+                  title={allSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                  style={{
+                    width: 16, height: 16, borderRadius: 4,
+                    border: `1.5px solid ${allSelected || someSelected ? C.green : C.borderStrong}`,
+                    background: allSelected ? C.green : someSelected ? 'rgba(34,197,94,0.3)' : 'transparent',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    color: C.bg, cursor: 'pointer', padding: 0,
+                  }}>
+                  {allSelected && <IconCheckSm size={10} sw={3}/>}
+                  {someSelected && !allSelected && <span style={{ width: 8, height: 2, background: C.green }}/>}
+                </button>
+              </th>
+              <SortHead k="name">Negocio</SortHead>
+              <SortHead w={140}>Categoría</SortHead>
+              <SortHead w={150}>Ciudad</SortHead>
+              <SortHead k="rating" w={110}>Rating</SortHead>
+              <SortHead k="opportunity_score" w={120} align="center">Score</SortHead>
+              <SortHead>Debilidades</SortHead>
+              <SortHead w={80} align="center">GBP</SortHead>
+              <SortHead w={70} align="center">Web</SortHead>
+              <SortHead w={130} align="center">Acción</SortHead>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((p, idx) => {
+              const isSelected = selected.includes(p.name);
+              const t = opportunityTier(p.opportunity_score.score);
+              return (
+                <tr key={p.name}
+                  onClick={() => onProspectClick(p)}
+                  style={{
+                    cursor: 'pointer',
+                    background: isSelected ? 'rgba(34,197,94,0.05)' : 'transparent',
+                    borderLeft: isSelected ? `2px solid ${C.green}` : '2px solid transparent',
+                    transition: 'background 0.12s',
+                  }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = 'transparent'; }}>
+                  {/* Checkbox */}
+                  <td style={{ padding: '12px', borderBottom: `1px solid ${C.border}` }}
+                      onClick={e => { e.stopPropagation(); toggleSelected(p.name); }}>
+                    <span style={{
+                      width: 16, height: 16, borderRadius: 4,
+                      border: `1.5px solid ${isSelected ? C.green : C.borderStrong}`,
+                      background: isSelected ? C.green : 'transparent',
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      color: C.bg, cursor: 'pointer',
+                    }}>{isSelected && <IconCheckSm size={10} sw={3}/>}</span>
+                  </td>
+                  {/* Name + address */}
+                  <td style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <Thumbnail name={p.name} size={36} hasImage={!!p.media.main_image_url} imageUrl={p.media.main_image_url}/>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, color: C.text, fontWeight: 600 }}>{p.name}</div>
+                        <div style={{
+                          fontSize: 11, color: C.text3, marginTop: 2,
+                          fontFamily: 'JetBrains Mono, monospace',
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          maxWidth: 240,
+                        }}>{p.location.address}</div>
+                      </div>
+                    </div>
+                  </td>
+                  {/* Category */}
+                  <td style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}` }}>
+                    <Badge color={C.text2} bg="rgba(255,255,255,0.04)">{p.category.primary}</Badge>
+                  </td>
+                  {/* City */}
+                  <td style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, fontSize: 12.5, color: C.text2 }}>
+                    {p.location.city}
+                  </td>
+                  {/* Rating */}
+                  <td style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Stars value={p.reviews.rating.value} size={11}/>
+                      <span style={{
+                        fontSize: 11, color: C.text3, fontFamily: 'JetBrains Mono, monospace',
+                      }}>({p.reviews.rating.votes_count})</span>
+                    </div>
+                  </td>
+                  {/* Score */}
+                  <td style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, textAlign: 'center' }}>
+                    <ScoreBadge score={p.opportunity_score.score} size="sm"/>
+                  </td>
+                  {/* Weaknesses */}
+                  <td style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}` }}>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {p.opportunity_score.weakness_signals.slice(0, 3).map(w => (
+                        <Badge key={w} color={C.text2} bg="rgba(255,255,255,0.04)" style={{ fontSize: 10 }}>
+                          {WEAKNESS_LABELS[w] || w}
+                        </Badge>
+                      ))}
+                      {p.opportunity_score.weakness_signals.length > 3 && (
+                        <Badge color={C.text3} bg="rgba(255,255,255,0.025)" style={{ fontSize: 10 }}>
+                          +{p.opportunity_score.weakness_signals.length - 3}
+                        </Badge>
+                      )}
+                    </div>
+                  </td>
+                  {/* Claimed */}
+                  <td style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, textAlign: 'center' }}>
+                    {p.status.is_claimed
+                      ? <IconCheck size={16} style={{ color: C.green }}/>
+                      : <IconXCircle size={16} style={{ color: C.red }}/>}
+                  </td>
+                  {/* Website */}
+                  <td style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, textAlign: 'center' }}>
+                    {p.contact.website_url
+                      ? <IconCheckSm size={14} style={{ color: C.green }} sw={2.5}/>
+                      : <span style={{ color: C.text4, fontFamily: 'JetBrains Mono, monospace' }}>—</span>}
+                  </td>
+                  {/* Action */}
+                  <td style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, textAlign: 'center' }}
+                      onClick={e => e.stopPropagation()}>
+                    <button onClick={() => onGenerateOutreach(p)} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      background: C.greenSoft, border: `1px solid ${C.greenBorder}`,
+                      color: C.green, fontSize: 11.5, fontWeight: 600,
+                      padding: '6px 11px', borderRadius: 7, cursor: 'pointer',
+                      transition: 'all 0.12s', fontFamily: 'Inter',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = C.green; e.currentTarget.style.color = C.bg; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = C.greenSoft; e.currentTarget.style.color = C.green; }}>
+                      <IconMessage size={11}/> Generar
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {sorted.length === 0 && (
+              <tr><td colSpan={10} style={{ padding: 60, textAlign: 'center', color: C.text3 }}>
+                Ningún prospecto coincide con los filtros aplicados.
+              </td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Prospect detail drawer
+// ─────────────────────────────────────────────────────────────────────────────
+function ProspectDrawer({ open, prospect, onClose, onGenerateOutreach }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [open, onClose]);
+
+  if (!open || !prospect) return null;
+  const p = prospect;
+  const t = opportunityTier(p.opportunity_score.score);
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 100,
+      background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+      display: 'flex', justifyContent: 'flex-end',
+      animation: 'overlayIn 0.2s ease',
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#0f0f0f',
+        borderLeft: `1px solid ${C.borderStrong}`,
+        width: '100%', maxWidth: 520, height: '100vh',
+        animation: 'slideInRight 0.3s ease',
+        overflowY: 'auto', display: 'flex', flexDirection: 'column',
+        boxShadow: '-30px 0 80px rgba(0,0,0,0.6)',
+      }}>
+        {/* Header */}
+        <div style={{
+          padding: '22px 24px 18px',
+          borderBottom: `1px solid ${C.border}`,
+          position: 'sticky', top: 0,
+          background: 'rgba(15,15,15,0.95)',
+          backdropFilter: 'blur(12px)',
+          zIndex: 5,
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <Thumbnail name={p.name} size={52}/>
+              <div>
+                <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 16, marginBottom: 3 }}>
+                  Detalle de prospecto
+                </div>
+                <h2 style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 22, color: C.text, letterSpacing: '-0.015em' }}>
+                  {p.name}
+                </h2>
+              </div>
+            </div>
+            <button onClick={onClose} style={{
+              background: 'rgba(255,255,255,0.06)', border: `1px solid ${C.border}`,
+              color: C.text2, width: 32, height: 32, borderRadius: 8,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            }}><IconX size={15}/></button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <Badge color={C.green} style={{ fontSize: 12, padding: '4px 10px' }}>{p.category.primary}</Badge>
+            <Badge color={C.text2} bg="rgba(255,255,255,0.04)" style={{ fontSize: 12 }}>{p.location.city}</Badge>
+            {!p.status.is_claimed && <Badge color={C.red} style={{ fontSize: 12 }}>Sin reclamar</Badge>}
+            {p.status.operating_status !== 'open' && (
+              <Badge color={C.amber} style={{ fontSize: 12 }}>
+                {STATUS_META[p.status.operating_status]?.label || p.status.operating_status}
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '20px 24px', flex: 1 }}>
+          {/* Opportunity score banner */}
+          <div style={{
+            background: `linear-gradient(135deg, ${t.color}18, ${t.color}05)`,
+            border: `1px solid ${t.color}40`,
+            borderRadius: 14, padding: 20, marginBottom: 20,
+            display: 'flex', alignItems: 'center', gap: 18,
+          }}>
+            <div style={{ flex: 1 }}>
+              <div style={{
+                fontSize: 11, color: C.text3, letterSpacing: '0.06em',
+                textTransform: 'uppercase', fontWeight: 600, marginBottom: 6,
+              }}>Opportunity Score</div>
+              <div style={{
+                fontFamily: 'Syne', fontWeight: 800, fontSize: 48,
+                color: t.color, lineHeight: 1, letterSpacing: '-0.025em',
+              }}>{p.opportunity_score.score}</div>
+              <div style={{ fontSize: 12.5, color: t.color, marginTop: 6, fontWeight: 600 }}>
+                {t.label} oportunidad
+              </div>
+            </div>
+            <div style={{ flex: 1.2, minWidth: 0 }}>
+              <div style={{
+                fontSize: 11, color: C.text3, letterSpacing: '0.06em',
+                textTransform: 'uppercase', fontWeight: 600, marginBottom: 8,
+              }}>Señales detectadas</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {p.opportunity_score.weakness_signals.map(w => (
+                  <span key={w} style={{
+                    fontSize: 11, color: C.red, fontWeight: 500,
+                    padding: '3px 8px', borderRadius: 6,
+                    background: 'rgba(239,68,68,0.08)',
+                    border: '1px solid rgba(239,68,68,0.25)',
+                  }}>{WEAKNESS_LABELS[w] || w}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick stats grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 20 }}>
+            <DetailStat icon={IconStar} iconColor={C.yellow} label="Rating"
+              value={`${p.reviews.rating.value.toFixed(1)} ★`}
+              sub={`${p.reviews.rating.votes_count} reseñas`}/>
+            <DetailStat icon={IconLayers} iconColor={C.blue} label="Completitud GBP"
+              value={`${p.profile_completeness.score}/100`}
+              sub={`${p.profile_completeness.missing.length} campos faltan`}/>
+            <DetailStat icon={IconCamera} iconColor={C.purple} label="Fotos"
+              value={p.media.total_photos}
+              sub="publicadas en Google"/>
+            <DetailStat icon={IconShield} iconColor={p.status.is_claimed ? C.green : C.red} label="Verificado"
+              value={p.status.is_claimed ? 'Sí' : 'No'}
+              sub={p.status.is_claimed ? 'Listing reclamado' : 'Sin reclamar'}/>
+          </div>
+
+          {/* Contact */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{
+              fontSize: 11, color: C.text3, letterSpacing: '0.06em',
+              textTransform: 'uppercase', fontWeight: 600, marginBottom: 10,
+            }}>Contacto</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <ContactItem icon={IconPhone} label="Teléfono" value={p.contact.phone || 'Sin teléfono'} missing={!p.contact.phone}/>
+              <ContactItem icon={IconGlobe} label="Sitio web" value={p.contact.website_url || 'No vinculado'} missing={!p.contact.website_url}/>
+              <ContactItem icon={IconPin} label="Dirección" value={p.location.address}/>
+            </div>
+          </div>
+        </div>
+
+        {/* Sticky CTA */}
+        <div style={{
+          padding: '16px 24px', borderTop: `1px solid ${C.border}`,
+          background: 'rgba(15,15,15,0.95)', backdropFilter: 'blur(12px)',
+          position: 'sticky', bottom: 0,
+        }}>
+          <button onClick={() => onGenerateOutreach(p)} style={{
+            width: '100%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            background: C.green, color: C.bg, border: 'none',
+            padding: '14px 20px', borderRadius: 10,
+            fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'Inter',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 8px 24px ${C.green}50`; }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
+            <IconMessage size={15}/> Generar outreach personalizado <IconZap size={14}/>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailStat({ icon: I, iconColor, label, value, sub }) {
+  return (
+    <div style={{
+      padding: '12px 14px', borderRadius: 10,
+      background: 'rgba(255,255,255,0.025)',
+      border: `1px solid ${C.border}`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span style={{ color: iconColor }}><I size={13}/></span>
+        <span style={{ fontSize: 10.5, color: C.text3, letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600 }}>{label}</span>
+      </div>
+      <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 17, color: C.text, lineHeight: 1.1 }}>{value}</div>
+      {sub && <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function ContactItem({ icon: I, label, value, missing }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      padding: '10px 12px', borderRadius: 9,
+      background: 'rgba(255,255,255,0.02)',
+      border: `1px solid ${C.border}`,
+    }}>
+      <span style={{ color: missing ? C.text3 : C.green }}><I size={14}/></span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10.5, color: C.text3, letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600 }}>{label}</div>
+        <div style={{
+          fontSize: 13, color: missing ? C.text3 : C.text, fontWeight: 500,
+          fontStyle: missing ? 'italic' : 'normal',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>{value}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bulk action footer
+// ─────────────────────────────────────────────────────────────────────────────
+function BulkFooter({ selected, onGenerate, onClear }) {
+  if (selected.length === 0) return null;
+  return (
+    <div style={{
+      position: 'fixed', bottom: 24, left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 50, animation: 'slideInUp 0.25s ease',
+    }}>
+      <div style={{
+        background: 'rgba(20,20,20,0.97)',
+        border: `1px solid ${C.greenBorder}`,
+        backdropFilter: 'blur(20px)',
+        borderRadius: 14, padding: '12px 14px 12px 18px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(34,197,94,0.15)',
+        display: 'flex', alignItems: 'center', gap: 16,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 8,
+            background: C.greenSoft, color: C.green,
+            border: `1px solid ${C.greenBorder}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: 'Syne', fontWeight: 800, fontSize: 13,
+          }}>{selected.length}</div>
+          <div>
+            <div style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>
+              {selected.length} prospecto{selected.length === 1 ? '' : 's'} seleccionado{selected.length === 1 ? '' : 's'}
+            </div>
+            <div style={{ fontSize: 11, color: C.text3 }}>
+              Listos para outreach automático
+            </div>
+          </div>
+        </div>
+        <div style={{ width: 1, height: 30, background: C.border }}/>
+        <button onClick={onClear} style={{
+          background: 'transparent', border: `1px solid ${C.border}`,
+          color: C.text2, padding: '8px 14px', borderRadius: 9,
+          fontSize: 12.5, cursor: 'pointer', fontWeight: 500,
+        }}>Cancelar</button>
+        <button onClick={onGenerate} style={{
+          background: C.green, color: C.bg, border: 'none',
+          padding: '10px 18px', borderRadius: 9,
+          fontWeight: 700, fontSize: 13, cursor: 'pointer',
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          transition: 'all 0.15s',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = `0 8px 24px ${C.green}50`; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
+          <IconMessage size={14}/>
+          Generar outreach para {selected.length}
+          <IconZap size={13}/>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main dashboard
+// ─────────────────────────────────────────────────────────────────────────────
+function DiscoverProspectsDashboard() {
+  const [filters, setFilters] = useState({
+    categories: [], location: '', unclaimed_only: false,
+    min_rating: 0, min_reviews: 0,
+  });
+  const [selected, setSelected] = useState([]);
+  const [drawerProspect, setDrawerProspect] = useState(null);
+
+  const filteredProspects = useMemo(() => {
+    return sampleResult.prospects.filter(p => {
+      if (filters.categories.length && !filters.categories.includes(p.category.primary)) return false;
+      if (filters.unclaimed_only && p.status.is_claimed) return false;
+      if (filters.min_rating > 0 && p.reviews.rating.value < filters.min_rating) return false;
+      if (filters.min_reviews > 0 && p.reviews.rating.votes_count < filters.min_reviews) return false;
+      return true;
+    });
+  }, [filters]);
+
+  // Re-derive aggregates so the dashboard stays consistent under filters
+  const result = useMemo(() => {
+    const unclaimed = filteredProspects.filter(p => !p.status.is_claimed).length;
+    const noWeb = filteredProspects.filter(p => !p.contact.website_url).length;
+    const highOpp = filteredProspects.filter(p => p.opportunity_score.score >= 60);
+    const catCounts = {};
+    filteredProspects.forEach(p => { catCounts[p.category.primary] = (catCounts[p.category.primary] || 0) + 1; });
+    const statusCounts = {};
+    filteredProspects.forEach(p => { statusCounts[p.status.operating_status] = (statusCounts[p.status.operating_status] || 0) + 1; });
+    return {
+      items_count: filteredProspects.length,
+      total_count: sampleResult.total_count,
+      prospects: filteredProspects,
+      high_opportunity: highOpp,
+      high_opportunity_count: highOpp.length,
+      unclaimed_count: unclaimed,
+      unclaimed_pct: filteredProspects.length ? (unclaimed / filteredProspects.length) * 100 : 0,
+      no_website_count: noWeb,
+      no_website_pct: filteredProspects.length ? (noWeb / filteredProspects.length) * 100 : 0,
+      operating_status_distribution: statusCounts,
+      top_categories: Object.entries(catCounts).map(([category, count]) => ({ category, count })).sort((a, b) => b.count - a.count),
+    };
+  }, [filteredProspects]);
+
+  const handleGenerateOutreach = (p) => {
+    alert(`Generando outreach personalizado para "${p.name}"\nScore: ${p.opportunity_score.score}\nSeñales: ${p.opportunity_score.weakness_signals.join(', ')}`);
+  };
+  const handleBulkOutreach = () => {
+    alert(`Generando ${selected.length} mensajes de outreach…`);
+    setSelected([]);
+  };
+
+  return (
+    <div>
+      {/* Header */}
+      <header style={{ marginBottom: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <div style={{ fontFamily: 'Caveat, cursive', color: C.green, fontSize: 18 }}>
+            Discover · prospección automática
+          </div>
+          <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.text4 }}/>
+          <div style={{ fontSize: 12, color: C.text3 }}>
+            Encuentra negocios que necesitan lo que ofreces
+          </div>
+        </div>
+        <h1 style={{
+          fontFamily: 'Syne, sans-serif', fontWeight: 800,
+          fontSize: 'clamp(28px, 4vw, 42px)', lineHeight: 1.05,
+          color: C.text, letterSpacing: '-0.025em',
+        }}>Descubrir prospectos</h1>
+      </header>
+
+      <FilterBar filters={filters} setFilters={setFilters} totalCount={sampleResult.total_count}/>
+
+      <KpiRow result={result}/>
+
+      <div className="map-list-grid" style={{
+        display: 'grid', gridTemplateColumns: '60fr 40fr', gap: 16, marginBottom: 24,
+      }}>
+        <ProspectsMap prospects={result.prospects} onProspectClick={setDrawerProspect}/>
+        <TopOpportunityList
+          prospects={result.high_opportunity}
+          onProspectClick={setDrawerProspect}
+          onGenerateOutreach={handleGenerateOutreach}/>
+      </div>
+
+      <div className="dist-row" style={{
+        display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16, marginBottom: 24,
+      }}>
+        <CategoriesTreemap categories={result.top_categories}/>
+        <OperatingStatusDonut dist={result.operating_status_distribution}/>
+      </div>
+
+      <ProspectsTable
+        prospects={result.prospects}
+        selected={selected} setSelected={setSelected}
+        onProspectClick={setDrawerProspect}
+        onGenerateOutreach={handleGenerateOutreach}/>
+
+      <ProspectDrawer
+        open={!!drawerProspect} prospect={drawerProspect}
+        onClose={() => setDrawerProspect(null)}
+        onGenerateOutreach={handleGenerateOutreach}/>
+
+      <BulkFooter selected={selected}
+        onGenerate={handleBulkOutreach}
+        onClear={() => setSelected([])}/>
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <div style={{ minHeight: '100vh', padding: '32px 32px 100px', background: '#0a0a0a' }}>
+      <div style={{
+        position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
+        backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.035) 1px, transparent 1px)`,
+        backgroundSize: '32px 32px',
+        maskImage: 'radial-gradient(ellipse 80% 50% at 50% 0%, black 30%, transparent 90%)',
+        WebkitMaskImage: 'radial-gradient(ellipse 80% 50% at 50% 0%, black 30%, transparent 90%)',
+      }}/>
+      <div style={{ maxWidth: 1320, margin: '0 auto', position: 'relative', zIndex: 1 }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          marginBottom: 28, paddingBottom: 18,
+          borderBottom: `1px solid ${C.border}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 28, height: 28, borderRadius: 8, background: C.green,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontFamily: 'Syne', fontWeight: 800, color: C.bg, fontSize: 14,
+            }}>E</div>
+            <div style={{ fontFamily: 'Syne', fontWeight: 700, fontSize: 16, color: C.text }}>EDA</div>
+            <div style={{
+              fontSize: 12, color: C.text3,
+              padding: '2px 8px', borderRadius: 999,
+              border: `1px solid ${C.border}`, marginLeft: 8,
+            }}>Discover</div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 12, color: C.text3 }}>pizzeriadonmario.co · LATAM</span>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.08)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: C.text2, fontSize: 12, fontWeight: 600,
+            }}>DM</div>
+          </div>
+        </div>
+        <DiscoverProspectsDashboard/>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>
