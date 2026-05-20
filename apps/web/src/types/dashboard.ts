@@ -231,14 +231,81 @@ export interface DiscoverProspectsData {
 
 // ── Full audit result ─────────────────────────────────────────────────────────
 export interface DashboardAuditResult {
-  domain: string; keyword: string; total_cost_usd: number;
+  domain:         string;
+  keyword:        string;
+  total_cost_usd: number;
   sections: {
-    serp?: SerpData | { error: string; detail?: string };
-    labs?: LabsData | { error: string; detail?: string };
-    keyword_data?: KeywordData | { error: string; detail?: string };
-    onpage?: OnPageData | { error: string; detail?: string };
-    crux?: CrUXData | { error: string; detail?: string };
+    serp?:          SerpData             | { error: string; detail?: string };
+    labs?:          LabsData              | { error: string; detail?: string };
+    keyword_data?:  KeywordData           | { error: string; detail?: string };
+    onpage?:        OnPageData            | { error: string; detail?: string };
+    crux?:          CrUXData              | { error: string; detail?: string };
+    business_info?: BusinessProfileData   | { error: string; detail?: string };  // NUEVO
+    reviews?:       ReviewsData           | { error: string; detail?: string };  // NUEVO
   };
-  health?: HealthScoreData;
-  errors?: string[];
+  health?:           HealthScoreData;
+  recommendations?:  RecommendationsOutput;                                       // NUEVO
+  errors?:           string[];
+}
+
+// ── ReviewsData (NUEVA) ──────────────────────────────────────────────────────
+// Shape devuelta por get_google_reviews() + _strip_reviews_for_prompt()
+// del backend. Solo se popula si el audit incluye fetch_reviews=true.
+export interface ReviewItem {
+  rating:           number;       // 1-5
+  text:             string;
+  owner_responded:  boolean;
+  datetime:         string;       // ISO 8601
+  reviewer_name?:   string;
+  reviewer_photo?:  string | null;
+}
+ 
+export interface ReviewsData {
+  reviews_count:               number;
+  avg_rating_in_sample:        number | null;
+  owner_response_rate:         number;        // 0-100 (%)
+  negative_reviews_count:      number;
+  negative_reviews_with_text:  ReviewItem[];
+  recent_reviews:              ReviewItem[];
+  cost?:                       number;
+  task_time?:                  string;
+}
+ 
+// ── Recommendation (NUEVA) ───────────────────────────────────────────────────
+// Output del prompt recommendations_v1.md
+export type RecommendationCategory =
+  | "critical" | "local" | "seo" | "performance" | "content" | "reputation";
+ 
+export type RecommendationPriority = "critical" | "high" | "medium" | "low";
+export type RecommendationImpact   = "high" | "medium" | "low";
+export type RecommendationEffort   = "low"  | "medium" | "high";
+export type HealthAssessment       = "good" | "needs_improvement" | "poor";
+ 
+export interface RecommendationEvidence {
+  metric:        string;    // ej "crux.metrics.largest_contentful_paint.p75"
+  current_value: string;
+  target_value:  string;
+}
+ 
+export interface Recommendation {
+  rank:             number;
+  title:            string;
+  category:         RecommendationCategory;
+  priority:         RecommendationPriority;
+  impact:           RecommendationImpact;
+  effort:           RecommendationEffort;
+  estimated_time:   string;
+  why_it_matters:   string;
+  what_to_do:       string[];
+  evidence:         RecommendationEvidence;
+  expected_outcome: string;
+}
+ 
+export interface RecommendationsOutput {
+  executive_summary:   string;
+  health_assessment:   HealthAssessment;
+  main_strengths:      string[];
+  main_gaps:           string[];
+  top_recommendations: Recommendation[];
+  next_audit_focus:    string;
 }
