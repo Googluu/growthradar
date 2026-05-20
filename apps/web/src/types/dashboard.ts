@@ -108,6 +108,8 @@ export interface OnPageData {
   health: OnPageHealth;
   issues: OnPageIssue[];
   passing_checks: OnPagePassingCheck[];
+  duplicate_title: boolean;
+  duplicate_description: boolean;
   performance: {
     time_to_interactive_ms: number | null; dom_complete_ms: number | null;
     largest_contentful_paint: number | null; first_input_delay: number | null;
