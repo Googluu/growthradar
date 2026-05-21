@@ -413,8 +413,8 @@ export default function DashboardResumen() {
     setErrMsg("");
 
     try {
-      const keyword = data.keywords[0] || undefined;
-      const { job_id, status, cached } = await triggerAudit(data.domain, keyword);
+      // const keyword = data.keywords[0] || undefined;
+      const { job_id, status, cached } = await triggerAudit(data);
 
       let result: DashboardAuditResult;
       if (status === "completed" && cached) {
