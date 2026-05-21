@@ -1,316 +1,518 @@
-# Sidebar Dashboard — Tasks
+Este es el JSON del On Page que genero la auditoria
 
-> Implementación del sidebar de navegación del dashboard EDA. Basado en el mockup acordado: 6 items principales agrupados por pilar (E·D·A) + sección utilidad. Estructura desktop con colapso lateral + drawer mobile.
-
----
-
-## 0. Decisiones de scope (MVP)
-
-- [x] Estructura consolidada: 6 items principales + utilidad (no 8 granulares)
-- [x] Sub-vistas como pestañas internas, no como rutas separadas en nav
-- [x] "Sitio web", "Mi perfil de Google", "Investigación de mercado" agrupan 2 sub-secciones cada uno
-- [x] Pilar Actúa entra con badge `[BETA]` o `[Próximamente]`
-- [x] Contexto del negocio actual: tanto en header como en sidebar (con timestamp del último audit)
-- [ ] Dropdown multi-negocio: DIFERIDO — diseñar la API para soportarlo pero no implementar UI todavía
-
----
-
-## 1. Setup & dependencies
-
-- [ ] Verificar que `shadcn/ui` esté instalado con los componentes: `Sheet`, `Tooltip`, `Button`, `Badge`, `Separator`, `Avatar`, `DropdownMenu`
-- [ ] Si falta alguno: `npx shadcn-ui@latest add sheet tooltip badge separator avatar dropdown-menu`
-- [ ] Instalar `lucide-react` si no está
-- [ ] Configurar fuente `Caveat` en `app/layout.tsx` (Google Fonts) para los separadores de pilar
-- [ ] Configurar `Geist Sans` como font-family por defecto si aún no está
-- [ ] Confirmar que `tailwind.config.ts` expone los tokens del design system EDA (`eda-green`, `eda-green-dark`, `bg-primary`, `bg-secondary`, `text-muted`, etc.)
-- [ ] Verificar breakpoints: `md: 768px` para conmutación desktop ↔ mobile
-
----
-
-## 2. Rutas (Next.js App Router)
-
-- [ ] Crear `app/dashboard/layout.tsx` — wrapper compartido por todas las páginas del dashboard. Renderiza `<Sidebar />` + `<Header />` + `{children}`
-- [ ] Mover el contenido actual de `/dashboard/page.tsx` (SERP) a `app/dashboard/posicionamiento/page.tsx`
-- [ ] Crear `app/dashboard/page.tsx` nuevo → Resumen (placeholder: health score + recomendaciones)
-- [ ] Crear `app/dashboard/sitio-web/page.tsx` con estructura de tabs (`Auditoría técnica` / `Velocidad real`)
-- [ ] Crear `app/dashboard/perfil-google/page.tsx` con tabs (`Perfil` / `Reseñas`)
-- [ ] Crear `app/dashboard/investigacion-mercado/page.tsx` con tabs (`Términos relacionados` / `Volumen de búsqueda`)
-- [ ] Crear `app/dashboard/prospectos/page.tsx`
-- [ ] Crear `app/dashboard/automatizaciones/page.tsx` (placeholder con copy "Pronto")
-- [ ] Crear `app/dashboard/historial/page.tsx`
-- [ ] Crear `app/dashboard/configuracion/page.tsx`
-
----
-
-## 3. Componentes — estructura de archivos
-
-- [ ] `components/dashboard/Sidebar.tsx` — root del sidebar
-- [ ] `components/dashboard/SidebarHeader.tsx` — logo EDA + botón colapsar
-- [ ] `components/dashboard/BusinessContextBlock.tsx` — nombre negocio + dominio + "Auditado hace X"
-- [ ] `components/dashboard/NavItem.tsx` — un item de nav reutilizable
-- [ ] `components/dashboard/PillarSeparator.tsx` — separador "· EVALÚA ·" / "· DESCUBRE ·" / "· ACTÚA ·"
-- [ ] `components/dashboard/SidebarFooter.tsx` — info del usuario logged-in + logout
-- [ ] `components/dashboard/MobileDrawer.tsx` — wrapper para `<Sheet>` en mobile
-- [ ] `components/dashboard/Header.tsx` — top header con breadcrumb + "Nueva búsqueda" (refactor del actual)
-
----
-
-## 4. NavItem — implementación
-
-- [ ] Props: `icon` (lucide component), `label` (string), `href` (string), `badge?` (string opcional), `isCollapsed?` (boolean)
-- [ ] Usar `usePathname()` de `next/navigation` para detectar estado activo
-- [ ] Match exacto del pathname para activar el item correcto
-- [ ] Renderizar con `<Link>` de `next/link` (no anchor crudo) para client-side routing
-- [ ] Layout: icono (20px) + label (text-sm) + badge opcional (alineado a la derecha)
-- [ ] Aplicar clases condicionales para active state (ver sección 6)
-- [ ] Tooltip al hover SOLO cuando `isCollapsed === true` mostrando el label
-
----
-
-## 5. Lista de NavItems — configuración
-
-Crear array de configuración en `lib/dashboard-nav.ts` para evitar hardcode:
-
-```typescript
-export const NAV_ITEMS: NavItem[] = [
-  { id: 'resumen', label: 'Resumen', icon: 'LayoutDashboard', href: '/dashboard' },
-  // pillar: EVALÚA
-  { id: 'posicionamiento', label: 'Posicionamiento', icon: 'Search', href: '/dashboard/posicionamiento', pillar: 'evalua' },
-  { id: 'sitio-web', label: 'Sitio web', icon: 'Monitor', href: '/dashboard/sitio-web', pillar: 'evalua' },
-  { id: 'perfil-google', label: 'Mi perfil de Google', icon: 'MapPin', href: '/dashboard/perfil-google', pillar: 'evalua' },
-  { id: 'investigacion', label: 'Investigación de mercado', icon: 'BarChart3', href: '/dashboard/investigacion-mercado', pillar: 'evalua' },
-  // pillar: DESCUBRE
-  { id: 'prospectos', label: 'Prospectos', icon: 'Target', href: '/dashboard/prospectos', pillar: 'descubre' },
-  // pillar: ACTÚA
-  { id: 'automatizaciones', label: 'Automatizaciones', icon: 'Zap', href: '/dashboard/automatizaciones', pillar: 'actua', badge: 'BETA' },
-  // utilidad
-  { id: 'historial', label: 'Historial', icon: 'History', href: '/dashboard/historial', group: 'utility' },
-  { id: 'configuracion', label: 'Configuración', icon: 'Settings', href: '/dashboard/configuracion', group: 'utility' },
-];
+```json
+{
+    "url": "https://www.mercadolibre.com.co/",
+    "cost": 0.000375,
+    "title": "Mercado Libre Colombia - Envíos Gratis en el día",
+    "has_h1": true,
+    "health": {
+        "is_indexable": true,
+        "issues_count": 5,
+        "onpage_score": 97.07,
+        "passing_count": 8,
+        "http_status_class": "2xx",
+        "computed_health_score": 84,
+        "issues_critical_count": 5
+    },
+    "issues": [
+        {
+            "check": "https_to_http_links",
+            "label": "Enlaza desde HTTPS a HTTP",
+            "severity": "critical"
+        },
+        {
+            "check": "no_image_alt",
+            "label": "Imágenes sin atributo alt",
+            "severity": "critical"
+        },
+        {
+            "check": "no_image_title",
+            "label": "Imágenes sin atributo title",
+            "severity": "critical"
+        },
+        {
+            "check": "has_render_blocking_resources",
+            "label": "Recursos que bloquean el render",
+            "severity": "critical"
+        },
+        {
+            "check": "low_content_rate",
+            "label": "Ratio de contenido bajo",
+            "severity": "critical"
+        }
+    ],
+    "server": "Tengine",
+    "content": {
+        "plain_text_rate": 0.006987754498944141,
+        "plain_text_size": 2270,
+        "plain_text_word_count": 352,
+        "smog_readability_index": 14.756829357015494,
+        "automated_readability_index": 9.168413149350648,
+        "dale_chall_readability_index": 15.561241720779222,
+        "title_to_content_consistency": 0.75,
+        "coleman_liau_readability_index": 12.197613636363638,
+        "flesch_kincaid_readability_index": 21.979821428571427,
+        "description_to_content_consistency": 0.6842105388641357,
+        "meta_keywords_to_content_consistency": null
+    },
+    "favicon": "https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/5.21.22/mercadolibre/favicon.svg",
+    "h1_text": [
+        "Mercado Libre"
+    ],
+    "h1_count": 1,
+    "headings": {
+        "h1": [
+            "Mercado Libre"
+        ],
+        "h2": [
+            "Envío gratis",
+            "Ingresa a tu cuenta",
+            "Ingresa tu ubicación",
+            "Medios de pago",
+            "Menos de $40.000",
+            "Más vendidos",
+            "Compra protegida",
+            "Tiendas oficiales",
+            "Nuestras categorías",
+            "¿Necesitas ayuda?",
+            "LOS ENVÍOS MÁS",
+            "RÁPIDOS DEL PAÍS",
+            "VIVE LA PASIÓN",
+            "DEL FÚTBOL",
+            "VIVE MERCADO LIBRE COMO UN EXPERTO Beneficios exclusivos desde 9900 pesos por mes.",
+            "Beneficios en entretenimiento",
+            "Categorías",
+            "Paga con tarjeta o en efectivo",
+            "Envío gratis por ser tu primera compra",
+            "Seguridad, de principio a fin",
+            "Más información"
+        ],
+        "h3": [
+            "Productos más buscados",
+            "Buscar productos por letra inicial",
+            "Acerca de",
+            "Otros sitios",
+            "Ayuda / PQR",
+            "Redes sociales",
+            "Mi cuenta",
+            "Suscripciones",
+            "Temporadas"
+        ],
+        "h4": [],
+        "h5": [],
+        "h6": []
+    },
+    "is_https": true,
+    "canonical": "https://www.mercadolibre.com.co/",
+    "task_time": "0.9211 sec.",
+    "fetch_time": "2026-05-21 02:30:51 +00:00",
+    "media_type": "text/html",
+    "raw_checks": {
+        "flash": false,
+        "frame": false,
+        "is_www": true,
+        "is_http": false,
+        "is_https": true,
+        "no_title": false,
+        "canonical": true,
+        "is_broken": false,
+        "no_h1_tag": false,
+        "no_doctype": false,
+        "no_favicon": false,
+        "is_4xx_code": false,
+        "is_5xx_code": false,
+        "is_redirect": false,
+        "lorem_ipsum": false,
+        "from_sitemap": false,
+        "no_image_alt": true,
+        "has_meta_title": false,
+        "no_description": false,
+        "no_image_title": true,
+        "title_too_long": false,
+        "has_micromarkup": false,
+        "large_page_size": false,
+        "small_page_size": false,
+        "title_too_short": false,
+        "has_html_doctype": true,
+        "irrelevant_title": false,
+        "low_content_rate": true,
+        "seo_friendly_url": true,
+        "high_content_rate": false,
+        "high_loading_time": false,
+        "high_waiting_time": false,
+        "duplicate_meta_tags": false,
+        "duplicate_title_tag": false,
+        "https_to_http_links": true,
+        "low_character_count": false,
+        "no_content_encoding": false,
+        "deprecated_html_tags": false,
+        "high_character_count": false,
+        "low_readability_rate": false,
+        "no_encoding_meta_tag": false,
+        "size_greater_than_3mb": false,
+        "has_micromarkup_errors": false,
+        "irrelevant_description": false,
+        "irrelevant_meta_keywords": false,
+        "meta_charset_consistency": false,
+        "has_meta_refresh_redirect": false,
+        "has_render_blocking_resources": true,
+        "seo_friendly_url_dynamic_check": true,
+        "seo_friendly_url_keywords_check": true,
+        "seo_friendly_url_characters_check": true,
+        "seo_friendly_url_relative_length_check": true
+    },
+    "click_depth": 0,
+    "description": "Compre productos con Envío Gratis en el día en Mercado Libre Colombia. Encuentre miles de marcas y productos a precios increíbles.",
+    "has_sitemap": false,
+    "performance": {
+        "dom_complete_ms": 204,
+        "page_size_bytes": 325250,
+        "waiting_time_ms": 0,
+        "download_time_ms": 182,
+        "duration_time_ms": 204,
+        "first_input_delay": 0,
+        "connection_time_ms": 6,
+        "encoded_size_bytes": 0,
+        "total_dom_size_bytes": 325250,
+        "time_to_interactive_ms": 204,
+        "cumulative_layout_shift": 0,
+        "largest_contentful_paint": 0,
+        "time_to_secure_connection": 16,
+        "total_transfer_size_bytes": 0
+    },
+    "status_code": 200,
+    "broken_links": false,
+    "images_count": 75,
+    "title_length": 48,
+    "meta_keywords": null,
+    "has_meta_title": true,
+    "has_robots_txt": false,
+    "headings_count": {
+        "h1": 1,
+        "h2": 21,
+        "h3": 9,
+        "h4": 0,
+        "h5": 0,
+        "h6": 0
+    },
+    "passing_checks": [
+        {
+            "check": "is_https",
+            "label": "Usa HTTPS"
+        },
+        {
+            "check": "canonical",
+            "label": "Tiene canonical"
+        },
+        {
+            "check": "has_html_doctype",
+            "label": "Doctype HTML correcto"
+        },
+        {
+            "check": "seo_friendly_url",
+            "label": "URL SEO-friendly"
+        },
+        {
+            "check": "seo_friendly_url_characters_check",
+            "label": "Caracteres de URL OK"
+        },
+        {
+            "check": "seo_friendly_url_dynamic_check",
+            "label": "URL no dinámica"
+        },
+        {
+            "check": "seo_friendly_url_keywords_check",
+            "label": "URL contiene keywords"
+        },
+        {
+            "check": "seo_friendly_url_relative_length_check",
+            "label": "Longitud de URL OK"
+        }
+    ],
+    "deprecated_tags": null,
+    "duplicate_title": false,
+    "page_size_bytes": 325250,
+    "resource_errors": [
+        {
+            "line": 415,
+            "column": 21365,
+            "message": "The closing tag and the currently open tag do not match.",
+            "status_code": 501
+        }
+    ],
+    "broken_resources": false,
+    "content_encoding": "br",
+    "task_status_code": 20000,
+    "duplicate_content": false,
+    "resource_warnings": [
+        {
+            "line": 1,
+            "column": 116,
+            "message": "Has node with more than 60 childs.",
+            "status_code": 1
+        }
+    ],
+    "social_media_tags": {
+        "og:image": "https://http2.mlstatic.com/static/org-img/homesnw/mercado-libre.png?v=2"
+    },
+    "description_length": 130,
+    "images_without_alt": 0,
+    "duplicate_meta_tags": [],
+    "resources_breakdown": {
+        "images_size": 0,
+        "images_count": 75,
+        "scripts_size": 0,
+        "scripts_count": 7,
+        "stylesheets_size": 0,
+        "stylesheets_count": 0,
+        "render_blocking_scripts_count": 1,
+        "render_blocking_stylesheets_count": 3
+    },
+    "external_links_count": 124,
+    "has_meta_description": true,
+    "internal_links_count": 107,
+    "duplicate_description": false,
+    "resource_errors_count": 1,
+    "onpage_score_dataforseo": 97.07,
+    "resource_warnings_count": 1
+}
 ```
 
-- [ ] Crear este archivo y tipo `NavItem`
-- [ ] Importar y mapear en `Sidebar.tsx`
-- [ ] Renderizar `PillarSeparator` antes de cada cambio de `pillar`
-- [ ] Renderizar un `<Separator />` antes del grupo `utility`
-
----
-
-## 6. Active state, hover y estilos
-
-### Active state (item seleccionado)
-
-- [ ] Borde izquierdo de 3px sólido en `eda-green` (#22c55e), pegado al edge del sidebar
-- [ ] Background de la fila: `eda-green` al 8% opacidad (`bg-green-500/8`)
-- [ ] Texto del label en blanco puro (`text-white`)
-- [ ] Icono en `eda-green`
-- [ ] El item activo NO tiene transición — se siente "anclado"
-
-### Hover state (item NO activo)
-
-- [ ] Background al 4% blanco (`hover:bg-white/4`)
-- [ ] Transición suave de 150ms en background y color de texto
-- [ ] Texto pasa de `text-muted` a `text-white/80`
-- [ ] Icono pasa de `text-muted` a `text-white/80`
-
-### Default state (item NO activo, sin hover)
-
-- [ ] Background transparente
-- [ ] Texto y icono en `text-muted` (#737373)
-- [ ] Sin borde izquierdo
-
----
-
-## 7. PillarSeparator (· EVALÚA ·)
-
-- [ ] Tipografía: `Caveat`, 11px, peso normal
-- [ ] Color: `eda-green` al 60% opacidad
-- [ ] Letter-spacing: amplio (~0.15em)
-- [ ] Text-align center
-- [ ] Padding vertical generoso (16px top, 8px bottom)
-- [ ] Renderizar el texto rodeado de puntos: `· EVALÚA ·`
-- [ ] Ocultar el texto cuando el sidebar está colapsado, dejar solo una línea horizontal corta verde de 12px de ancho centrada
-
-### Nice-to-have decorativo
-
-- [ ] Considerar agregar una línea SVG hand-drawn debajo de cada separador (5-6px de alto, ~80% del ancho del sidebar, color `eda-green/30`). Esto conecta visualmente con la estética del logo. Si toma >30 min implementarlo, déjalo para v2.
-
----
-
-## 8. BusinessContextBlock
-
-Bloque arriba del sidebar (debajo del logo, encima del primer nav item):
-
-- [ ] Mostrar `<Avatar>` con la inicial del negocio + bg `eda-green/20`
-- [ ] Nombre del negocio (text-sm, font-medium, blanco)
-- [ ] Dominio (text-xs, `text-muted`)
-- [ ] "Auditado hace X" (text-xs, `text-muted`) — calcular relativo usando `date-fns` o nativo
-- [ ] Si no hay audit activo: mostrar CTA "Nueva auditoría →" en su lugar
-- [ ] En estado colapsado: mostrar SOLO el avatar centrado, los textos se ocultan
-- [ ] Cuando lleguen multi-business: este bloque se convierte en `<DropdownMenu>` trigger (DIFERIDO, dejar el componente preparado pero no implementar dropdown todavía)
-
----
-
-## 9. SidebarHeader — logo + botón colapsar
-
-- [ ] Logo EDA a la izquierda (`<Image>` con `/logo-eda.png`, 32×32)
-- [ ] Texto "EDA" al lado del logo (font-bold, blanco) — oculto cuando colapsado
-- [ ] Botón circular en la esquina derecha con icono `ChevronsLeft` (lucide)
-- [ ] Al hacer click: alternar estado `isCollapsed`
-- [ ] El icono rota a `ChevronsRight` cuando está colapsado
-- [ ] Persistir el estado en `localStorage` con key `eda:sidebar-collapsed`
-- [ ] Restaurar el estado en mount (con guard para SSR)
-
----
-
-## 10. SidebarFooter — usuario
-
-- [ ] Avatar pequeño (28px) con la inicial del email del usuario
-- [ ] Email truncado con ellipsis si es muy largo
-- [ ] Click → dropdown con: "Mi cuenta", "Plan y facturación", "Cerrar sesión"
-- [ ] En estado colapsado: solo el avatar, sin texto
-
----
-
-## 11. Colapso desktop
-
-- [ ] Ancho expandido: 264px
-- [ ] Ancho colapsado: 64px
-- [ ] Transición de width: 200ms ease-out
-- [ ] Todos los elementos con texto se ocultan con `opacity-0 + width-0` cuando `isCollapsed`
-- [ ] Mantener los íconos centrados horizontalmente en el espacio colapsado
-- [ ] Tooltip en TODOS los nav items cuando colapsado (mostrar el label)
-- [ ] El `BusinessContextBlock` colapsa al avatar circular centrado
-- [ ] Los `PillarSeparator` colapsan a una línea verde corta horizontal
-
----
-
-## 12. Mobile drawer
-
-- [ ] Detectar viewport `<768px` y ocultar el sidebar fixed
-- [ ] Renderizar botón hamburger (icono `Menu` de lucide) en la esquina izq del header en mobile
-- [ ] Al hacer click: abrir `<Sheet side="left">` con el contenido del sidebar
-- [ ] Sheet overlay con `bg-black/60 backdrop-blur-sm`
-- [ ] Ancho del drawer: 280px o 80vw (lo que sea menor)
-- [ ] Al hacer click en cualquier `NavItem`: cerrar drawer + navegar
-- [ ] Swipe-to-close gesture (shadcn lo maneja por defecto)
-- [ ] Tap fuera del drawer también cierra
-
----
-
-## 13. Header (refactor del actual)
-
-- [ ] Mantener el breadcrumb: `EDA › MercadoLibre › mercadolibre.com.co`
-- [ ] Mantener botón `+ Nueva búsqueda` a la derecha
-- [ ] Agregar botón hamburger a la izquierda SOLO en mobile (`md:hidden`)
-- [ ] En desktop con sidebar colapsado, el header NO necesita el hamburger
-- [ ] El "EDA" del breadcrumb se vuelve clickeable → home del dashboard
-- [ ] Considerar mover el `+ Nueva búsqueda` a un `<Button>` con icono `Plus` que sea sólido para más prominencia
-
----
-
-## 14. Tabs internas por sección
-
-### Sitio web (`/dashboard/sitio-web`)
-- [ ] Tab 1: "Auditoría técnica" → componente OnPage del Prompt 5
-- [ ] Tab 2: "Velocidad real" → componente CrUX del Prompt 7
-- [ ] Default tab: "Auditoría técnica"
-- [ ] Persist tab en query param `?tab=tecnica` o `?tab=velocidad`
-
-### Mi perfil de Google (`/dashboard/perfil-google`)
-- [ ] Tab 1: "Perfil" → componente Business Profile del Prompt 8
-- [ ] Tab 2: "Reseñas" → componente Reviews (a construir)
-- [ ] Default tab: "Perfil"
-
-### Investigación de mercado (`/dashboard/investigacion-mercado`)
-- [ ] Tab 1: "Términos relacionados" → componente Labs del Prompt 3
-- [ ] Tab 2: "Volumen de búsqueda" → componente Keyword Data del Prompt 4
-- [ ] Default tab: "Términos relacionados"
-
-### Implementación común para tabs
-- [ ] Usar `<Tabs>` de shadcn con `value` controlado por query param
-- [ ] Estilo: tabs con borde inferior animado (no pill style), align izquierda
-- [ ] Active tab: borde inferior `eda-green` de 2px + texto blanco
-- [ ] Inactive tab: texto `text-muted`, sin borde
-
----
-
-## 15. Estados vacíos / placeholders
-
-- [ ] `/dashboard` (Resumen): si no hay audit aún → empty state con CTA "Hacer mi primera auditoría →"
-- [ ] `/dashboard/posicionamiento`: ya tiene contenido, no tocar
-- [ ] `/dashboard/sitio-web`: empty state mientras no integres OnPage/CrUX → "Próximamente: auditoría técnica y velocidad real"
-- [ ] `/dashboard/perfil-google`: empty state → "Conecta tu perfil de Google para ver esta sección" + CTA
-- [ ] `/dashboard/investigacion-mercado`: empty state → "Próximamente"
-- [ ] `/dashboard/prospectos`: empty state → "Pronto vas a poder descubrir negocios que necesitan lo que ofreces"
-- [ ] `/dashboard/automatizaciones`: empty state distintivo con badge BETA grande, copy "Estamos preparando esto. Mientras tanto, agenda una llamada con nosotros para automatizar manualmente." + Calendly embed
-- [ ] `/dashboard/historial`: empty state si no hay audits → "Tus auditorías pasadas aparecerán aquí"
-- [ ] `/dashboard/configuracion`: form básico (perfil, plan, integraciones) o placeholder
-
----
-
-## 16. Accesibilidad
-
-- [ ] Todos los `NavItem` con `aria-label` cuando el label visual está oculto (estado colapsado)
-- [ ] Botón colapsar con `aria-label="Colapsar sidebar"` / `"Expandir sidebar"`
-- [ ] Botón hamburger con `aria-label="Abrir menú de navegación"`
-- [ ] `aria-current="page"` en el `NavItem` activo
-- [ ] Focus visible: outline verde de 2px en todos los items clickeables
-- [ ] Tab key navega por: hamburger → logo → nav items en orden → footer
-- [ ] Escape cierra el mobile drawer
-- [ ] `role="navigation"` en el `<nav>` del sidebar
-
----
-
-## 17. Polish & QA
-
-- [ ] Smooth transitions en hover, active, collapse — nada se siente "salto"
-- [ ] Scroll del sidebar funcional si los items sobrepasan la altura (raro pero por si acaso)
-- [ ] El sidebar es `position: sticky` o `fixed` con `height: 100vh` — no scrollea con la página
-- [ ] Verificar que el active state se refleja correctamente al hacer click rápido entre items (sin lag)
-- [ ] En mobile, el drawer se cierra al cambiar de orientación del device
-- [ ] Lighthouse audit del `/dashboard` → A11y >95, Performance no debe bajar
-- [ ] Probar en Chrome, Safari, Firefox
-- [ ] Probar en iOS Safari (la fuente Caveat a veces se ve raro ahí)
-
----
-
-## 18. Diferido — NO hacer en esta iteración
-
-- [ ] Dropdown de multi-business en el `BusinessContextBlock` — preparar la estructura del componente pero sin lógica
-- [ ] Search bar dentro del sidebar para filtrar nav items (no es necesario con 9 items)
-- [ ] Notifications badge en items que tengan alerts pendientes (ej. "Posicionamiento (1)")
-- [ ] Sub-items expandibles en el nav (ya decidimos usar tabs internas en su lugar)
-- [ ] Tema claro (light mode) — solo dark theme para MVP
-- [ ] Keyboard shortcuts (Cmd+K para command palette, Cmd+1-9 para saltar a items)
-
----
-
-## Estimación
-
-| Bloque | Esfuerzo |
-| --- | --- |
-| Componentes core (Sidebar, NavItem, separadores, contexto, footer) | 4-6h |
-| Rutas + layout compartido | 1-2h |
-| Estados (active, hover, collapsed) + persistencia | 2h |
-| Mobile drawer | 1h |
-| Refactor del header existente | 1h |
-| Empty states de las secciones nuevas | 1-2h |
-| QA + accesibilidad + polish | 2h |
-| **Total estimado MVP** | **12-15h** |
-
----
-
-## Orden de implementación sugerido
-
-1. Setup + rutas (sección 1 + 2)
-2. Componentes vacíos (sección 3) — esqueletos primero
-3. Layout compartido `/dashboard/layout.tsx` con header + sidebar mockeados
-4. NavItem + lista + active state (secciones 4, 5, 6)
-5. PillarSeparator (sección 7)
-6. BusinessContextBlock + SidebarFooter (secciones 8, 10)
-7. Colapso desktop (secciones 9, 11)
-8. Mobile drawer (sección 12)
-9. Empty states de secciones nuevas (sección 15)
-10. Tabs internas donde corresponda (sección 14)
-11. Accesibilidad + QA (secciones 16, 17)
+Este es el JSON de On Page con la misma URL que genere en el playground de dataforseo:
+```json
+{
+  "id": "05211526-1661-0275-0000-9a955aa8ea8e",
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "time": "0.6626 sec.",
+  "cost": 0.000125,
+  "result_count": 1,
+  "path": [
+    "v3",
+    "on_page",
+    "instant_pages"
+  ],
+  "data": {
+    "api": "on_page",
+    "function": "instant_pages",
+    "url": "https://mercadolibre.com.co/",
+    "enable_javascript": false,
+    "load_resources": false,
+    "enable_browser_rendering": false,
+    "disable_cookie_popup": false,
+    "return_despite_timeout": false,
+    "check_spell": false
+  },
+  "result": [
+    {
+      "crawl_progress": "finished",
+      "crawl_status": null,
+      "crawl_gateway_address": "168.119.141.170",
+      "items_count": 1,
+      "items": [
+        {
+          "resource_type": "html",
+          "status_code": 200,
+          "location": null,
+          "url": "https://www.mercadolibre.com.co/",
+          "meta": {
+            "title": "Mercado Libre Colombia - Envíos Gratis en el día",
+            "charset": 65001,
+            "follow": true,
+            "generator": null,
+            "htags": {
+              "h1": [
+                "Mercado Libre"
+              ],
+              "h2": [
+                "Envío gratis",
+                "Ingresa a tu cuenta",
+                "Ingresa tu ubicación",
+                "Medios de pago",
+                "Menos de $40.000",
+                "Más vendidos",
+                "Compra protegida",
+                "Tiendas oficiales",
+                "Nuestras categorías",
+                "¿Necesitas ayuda?",
+                "LOS ENVÍOS MÁS",
+                "RÁPIDOS DEL PAÍS",
+                "VIVE LA PASIÓN",
+                "DEL FÚTBOL",
+                "VIVE MERCADO LIBRE COMO UN EXPERTO Beneficios exclusivos desde 9900 pesos por mes.",
+                "Beneficios en entretenimiento",
+                "Categorías",
+                "Paga con tarjeta o en efectivo",
+                "Envío gratis por ser tu primera compra",
+                "Seguridad, de principio a fin",
+                "Más información"
+              ],
+              "h3": [
+                "Productos más buscados",
+                "Buscar productos por letra inicial",
+                "Acerca de",
+                "Otros sitios",
+                "Ayuda / PQR",
+                "Redes sociales",
+                "Mi cuenta",
+                "Suscripciones",
+                "Temporadas"
+              ]
+            },
+            "description": "Compre productos con Envío Gratis en el día en Mercado Libre Colombia. Encuentre miles de marcas y productos a precios increíbles.",
+            "favicon": "https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/5.21.22/mercadolibre/favicon.svg",
+            "meta_keywords": null,
+            "canonical": "https://www.mercadolibre.com.co/",
+            "internal_links_count": 107,
+            "external_links_count": 124,
+            "inbound_links_count": 0,
+            "images_count": 75,
+            "images_size": 0,
+            "scripts_count": 7,
+            "scripts_size": 0,
+            "stylesheets_count": 0,
+            "stylesheets_size": 0,
+            "title_length": 48,
+            "description_length": 130,
+            "render_blocking_scripts_count": 1,
+            "render_blocking_stylesheets_count": 3,
+            "cumulative_layout_shift": 0,
+            "meta_title": null,
+            "content": {
+              "plain_text_size": 2270,
+              "plain_text_rate": 0.006995808678500986,
+              "plain_text_word_count": 352,
+              "automated_readability_index": 9.168413149350648,
+              "coleman_liau_readability_index": 12.197613636363638,
+              "dale_chall_readability_index": 15.561241720779222,
+              "flesch_kincaid_readability_index": 21.979821428571427,
+              "smog_readability_index": 14.756829357015494,
+              "description_to_content_consistency": 0.6842105388641357,
+              "title_to_content_consistency": 0.75,
+              "meta_keywords_to_content_consistency": null
+            },
+            "deprecated_tags": null,
+            "duplicate_meta_tags": null,
+            "spell": null,
+            "social_media_tags": {
+              "og:image": "https://http2.mlstatic.com/static/org-img/homesnw/mercado-libre.png?v=2"
+            }
+          },
+          "page_timing": {
+            "time_to_interactive": 34,
+            "dom_complete": 34,
+            "largest_contentful_paint": 0,
+            "first_input_delay": 0,
+            "connection_time": 6,
+            "time_to_secure_connection": 15,
+            "request_sent_time": 0,
+            "waiting_time": 0,
+            "download_time": 13,
+            "duration_time": 34,
+            "fetch_start": 0,
+            "fetch_end": 34
+          },
+          "onpage_score": 97.07,
+          "total_dom_size": 324876,
+          "custom_js_response": null,
+          "custom_js_client_exception": null,
+          "resource_errors": {
+            "errors": [
+              {
+                "line": 405,
+                "column": 21365,
+                "message": "The closing tag and the currently open tag do not match.",
+                "status_code": 501
+              }
+            ],
+            "warnings": [
+              {
+                "line": 1,
+                "column": 116,
+                "message": "Has node with more than 60 childs.",
+                "status_code": 1
+              }
+            ]
+          },
+          "broken_resources": false,
+          "broken_links": false,
+          "duplicate_title": false,
+          "duplicate_description": false,
+          "duplicate_content": false,
+          "click_depth": 0,
+          "size": 324876,
+          "encoded_size": 0,
+          "total_transfer_size": 0,
+          "fetch_time": "2026-05-21 12:26:19 +00:00",
+          "cache_control": {
+            "cachable": true,
+            "ttl": 0
+          },
+          "checks": {
+            "no_content_encoding": false,
+            "high_loading_time": false,
+            "from_sitemap": false,
+            "is_redirect": false,
+            "is_4xx_code": false,
+            "is_5xx_code": false,
+            "is_broken": false,
+            "is_www": true,
+            "is_https": true,
+            "is_http": false,
+            "high_waiting_time": false,
+            "has_micromarkup": false,
+            "has_micromarkup_errors": false,
+            "no_doctype": false,
+            "has_html_doctype": true,
+            "canonical": true,
+            "no_encoding_meta_tag": false,
+            "no_h1_tag": false,
+            "https_to_http_links": true,
+            "size_greater_than_3mb": false,
+            "meta_charset_consistency": false,
+            "has_meta_refresh_redirect": false,
+            "has_render_blocking_resources": true,
+            "low_content_rate": true,
+            "high_content_rate": false,
+            "low_character_count": false,
+            "high_character_count": false,
+            "small_page_size": false,
+            "large_page_size": false,
+            "low_readability_rate": false,
+            "irrelevant_description": false,
+            "irrelevant_title": false,
+            "irrelevant_meta_keywords": false,
+            "title_too_long": false,
+            "has_meta_title": false,
+            "title_too_short": false,
+            "deprecated_html_tags": false,
+            "duplicate_meta_tags": false,
+            "duplicate_title_tag": false,
+            "no_image_alt": true,
+            "no_image_title": true,
+            "no_description": false,
+            "no_title": false,
+            "no_favicon": false,
+            "seo_friendly_url": true,
+            "flash": false,
+            "frame": false,
+            "lorem_ipsum": false,
+            "seo_friendly_url_characters_check": true,
+            "seo_friendly_url_dynamic_check": true,
+            "seo_friendly_url_keywords_check": true,
+            "seo_friendly_url_relative_length_check": true
+          },
+          "content_encoding": "br",
+          "media_type": "text/html",
+          "server": "Tengine",
+          "is_resource": false,
+          "url_length": 32,
+          "relative_url_length": 1,
+          "last_modified": null
+        }
+      ]
+    }
+  ]
+}
+```
