@@ -50,7 +50,10 @@ export interface LabsKeyword {
   keyword_difficulty: number | null; main_intent: string | null;
   monthly_searches: MonthlySearch[];
   serp_features: string[];
+  related_keywords_sub?: string[];
+  categories?: number[];
 }
+export interface LabsTopCategory { category_id: number; count: number; category_name?: string }
 export interface LabsData {
   seed_keyword: string; total_count: number; items_count: number;
   keywords: LabsKeyword[];
@@ -60,6 +63,7 @@ export interface LabsData {
   competition_distribution: Record<string, number>;
   intent_distribution: Record<string, number>;
   difficulty_buckets: { easy: number; medium: number; hard: number; very_hard: number };
+  top_categories?: LabsTopCategory[];
   top_keywords_by_volume: LabsKeyword[];
   low_hanging_fruit: LabsKeyword[];
   monthly_aggregated: Array<{ year_month: string; search_volume: number }>;

@@ -2,14 +2,15 @@
 
 import type { LabsData } from "@/types/dashboard";
 import { G, C } from "./keyword/shared";
-import { KpiGrid }           from "./keyword/KpiGrid";
-import { MonthlyChart }      from "./keyword/MonthlyChart";
-import { IntentDonut }       from "./keyword/IntentDonut";
-import { CompetitionBar }    from "./keyword/CompetitionBar";
-import { DifficultyBuckets } from "./keyword/DifficultyBuckets";
-import { LowHangingFruit }   from "./keyword/LowHangingFruit";
-import { KeywordsTable }     from "./keyword/KeywordsTable";
-import { OpsFooter }         from "./keyword/OpsFooter";
+import { KpiGrid }              from "./keyword/KpiGrid";
+import { MonthlyChart }         from "./keyword/MonthlyChart";
+import { IntentDonut }          from "./keyword/IntentDonut";
+import { CompetitionBar }       from "./keyword/CompetitionBar";
+import { DifficultyBuckets }    from "./keyword/DifficultyBuckets";
+import { LowHangingFruit }      from "./keyword/LowHangingFruit";
+import { KeywordsTable }        from "./keyword/KeywordsTable";
+import { CategoriesTreemap }    from "./keyword/CategoriesTreemap";
+import { OpsFooter }            from "./keyword/OpsFooter";
 
 export function KeywordResearchSection({ data }: { data: LabsData }) {
   return (
@@ -60,6 +61,9 @@ export function KeywordResearchSection({ data }: { data: LabsData }) {
 
       {/* Full keyword table */}
       <KeywordsTable keywords={data.keywords} />
+
+      {/* Categories treemap */}
+      <CategoriesTreemap categories={data.top_categories} />
 
       {/* Footer */}
       <OpsFooter data={data} />
