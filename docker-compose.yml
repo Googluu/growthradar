@@ -10,8 +10,9 @@ services:
     env_file:
       - apps/api/.env
     volumes:
-      # Hot reload: monta el código fuente en desarrollo
+      # Hot reload: monta el código fuente y migraciones en desarrollo
       - ./apps/api/src:/app/src
+      - ./apps/api/alembic:/app/alembic
       - ./packages:/app/packages
     command: >
       uv run uvicorn src.main:app
@@ -34,6 +35,7 @@ services:
       - apps/api/.env
     volumes:
       - ./apps/api/src:/app/src
+      - ./apps/api/alembic:/app/alembic
       - ./packages:/app/packages
     command: >
       uv run celery -A src.worker.celery_app worker

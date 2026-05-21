@@ -14,8 +14,10 @@ COPY pyproject.toml uv.lock ./
 # Instalar dependencias en el entorno del sistema (sin venv en contenedor)
 RUN uv sync --frozen --no-dev --no-install-project
 
-# Copiar el código fuente
+# Copiar el código fuente y migraciones
 COPY src/ ./src/
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
 
 # Puerto expuesto por uvicorn (solo relevante para el servicio api)
 EXPOSE 8000
