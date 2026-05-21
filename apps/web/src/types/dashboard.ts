@@ -124,6 +124,13 @@ export interface OnPageData {
   content: {
     plain_text_size: number | null; plain_text_rate: number | null;
     plain_text_word_count: number | null; automated_readability_index: number | null;
+    flesch_kincaid_readability_index: number | null;
+    smog_readability_index: number | null;
+    coleman_liau_readability_index: number | null;
+    dale_chall_readability_index: number | null;
+    title_to_content_consistency: number | null;
+    description_to_content_consistency: number | null;
+    meta_keywords_to_content_consistency: number | null;
   };
   resources_breakdown: {
     scripts_count: number; scripts_size: number;

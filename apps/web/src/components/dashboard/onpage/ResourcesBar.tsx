@@ -104,19 +104,26 @@ export function ResourcesBar({
         })}
       </div>
 
-      {rb.render_blocking_scripts_count > 0 && (
-        <div style={{
-          marginTop: 14, padding: "10px 14px", borderRadius: 9,
-          background: "rgba(245,158,11,0.08)",
-          border: "1px solid rgba(245,158,11,0.25)",
-          color: AM, fontSize: 12.5,
-          display: "inline-flex", alignItems: "center", gap: 8,
-        }}>
-          <IconWarn size={14} />
-          <strong style={{ fontWeight: 600 }}>{rb.render_blocking_scripts_count} scripts</strong>
-          <span style={{ color: "rgba(245,158,11,0.85)" }}>bloquean el renderizado inicial</span>
-        </div>
-      )}
+      {(rb.render_blocking_scripts_count + rb.render_blocking_stylesheets_count) > 0 && (() => {
+        const totalBlocking = rb.render_blocking_scripts_count + rb.render_blocking_stylesheets_count;
+        const parts = [
+          rb.render_blocking_scripts_count > 0 && `${rb.render_blocking_scripts_count} scripts`,
+          rb.render_blocking_stylesheets_count > 0 && `${rb.render_blocking_stylesheets_count} stylesheets`,
+        ].filter(Boolean).join(" + ");
+        return (
+          <div style={{
+            marginTop: 14, padding: "10px 14px", borderRadius: 9,
+            background: "rgba(245,158,11,0.08)",
+            border: "1px solid rgba(245,158,11,0.25)",
+            color: AM, fontSize: 12.5,
+            display: "inline-flex", alignItems: "center", gap: 8,
+          }}>
+            <IconWarn size={14} />
+            <strong style={{ fontWeight: 600 }}>{parts} ({totalBlocking} recursos)</strong>
+            <span style={{ color: "rgba(245,158,11,0.85)" }}>bloquean el renderizado inicial</span>
+          </div>
+        );
+      })()}
     </Card>
   );
 }

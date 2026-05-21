@@ -157,7 +157,7 @@ export function HeroCard({ data }: { data: OnPageData }) {
               </Badge>
             )}
             <Badge tone="default">
-              <IconLayers size={11} /> OnPage {health.onpage_score}
+              <IconLayers size={11} /> OnPage {Math.round(health.onpage_score)}
             </Badge>
             {data.is_https && <Badge tone="green">HTTPS</Badge>}
           </div>
