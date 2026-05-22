@@ -10,6 +10,8 @@ Si el dominio no tiene suficiente tráfico en Chrome → CruxNoDataError.
 Docs: https://developer.chrome.com/docs/crux/api
 """
 
+from urllib.parse import urlparse
+
 import httpx
 
 from src.config import settings
@@ -38,6 +40,32 @@ _UNITS: dict[str, str] = {
 
 class CruxNoDataError(Exception):
     """El dominio no tiene datos en CrUX (404). Se debe usar fallback."""
+
+
+def _candidate_origins(origin: str) -> list[str]:
+    """
+    Devuelve una lista de origins a intentar, de más específico a más genérico.
+
+    CrUX indexa por origen registrable y a menudo tiene datos para el dominio
+    .com raíz pero no para la variante con TLD de país (ej. .com.co, .com.mx).
+
+    Ejemplos:
+      https://mercadolibre.com.co → [https://mercadolibre.com.co, https://mercadolibre.com]
+      https://amazon.com.br       → [https://amazon.com.br, https://amazon.com]
+      https://google.com          → [https://google.com]
+    """
+    parsed = urlparse(origin)
+    hostname = parsed.hostname or ""
+    parts = hostname.split(".")
+    candidates: list[str] = [origin]
+
+    # Detecta el patrón name.com.cc donde cc es un TLD de país (2 letras).
+    # Ejemplo: mercadolibre.com.co → partes [-1]='co' (2 chars) → fallback: mercadolibre.com
+    if len(parts) >= 3 and len(parts[-1]) == 2:
+        fallback_host = ".".join(parts[:-1])
+        candidates.append(f"{parsed.scheme}://{fallback_host}")
+
+    return candidates
 
 
 def _classify(metric_name: str, p75: float) -> str:
@@ -70,25 +98,32 @@ def query_crux(origin: str, form_factor: str = "DESKTOP") -> dict:
     """
     Consulta la CrUX API de forma síncrona (para uso desde el worker Celery).
 
+    Intenta primero con el origin exacto; si recibe 404, reintenta con el
+    dominio raíz sin TLD de país (ej. mercadolibre.com.co → mercadolibre.com).
+
     Returns:
         dict con campos: origin, collection_period, metrics, performance_score
 
     Raises:
-        CruxNoDataError: si el dominio no tiene datos en CrUX (404).
+        CruxNoDataError: si ningún candidate tiene datos en CrUX.
         httpx.HTTPError: si hay un error de red o la API retorna un error inesperado.
     """
-    response = httpx.post(
-        url=f"{_CRUX_QUERY_ENDPOINT}?key={settings.crux_api_key}",
-        json={"origin": origin, "formFactor": form_factor},
-        headers={"Content-Type": "application/json"},
-        timeout=15.0,
-    )
+    last_exc: Exception = CruxNoDataError(f"No CrUX data for {origin}")
 
-    if response.status_code == 404:
-        raise CruxNoDataError(f"No CrUX data for {origin}")
+    for candidate in _candidate_origins(origin):
+        response = httpx.post(
+            url=f"{_CRUX_QUERY_ENDPOINT}?key={settings.crux_api_key}",
+            json={"origin": candidate, "formFactor": form_factor},
+            headers={"Content-Type": "application/json"},
+            timeout=15.0,
+        )
+        if response.status_code == 404:
+            last_exc = CruxNoDataError(f"No CrUX data for {candidate}")
+            continue
+        response.raise_for_status()
+        return _parse(response.json(), candidate, form_factor)
 
-    response.raise_for_status()
-    return _parse(response.json(), origin, form_factor)
+    raise last_exc
 
 
 def _parse(raw: dict, origin: str, form_factor: str) -> dict:
@@ -148,25 +183,27 @@ def query_crux_history(origin: str, form_factor: str = "DESKTOP") -> dict:
     Devuelve hasta 25 puntos semanales (~6 meses) por métrica, permitiendo
     visualizar tendencias y detectar regresiones de performance en el tiempo.
 
-    Mismo dominio puede tener datos en queryRecord pero no en History
-    (requiere más tráfico sostenido). El fallback ante CruxNoDataError es
-    simplemente no mostrar la sección de tendencia.
+    Aplica el mismo fallback de dominio raíz que query_crux.
 
     Raises:
-        CruxNoDataError: si el dominio no tiene datos históricos en CrUX (404).
+        CruxNoDataError: si ningún candidate tiene datos históricos en CrUX.
     """
-    response = httpx.post(
-        url=f"{_CRUX_HISTORY_ENDPOINT}?key={settings.crux_api_key}",
-        json={"origin": origin, "formFactor": form_factor},
-        headers={"Content-Type": "application/json"},
-        timeout=20.0,
-    )
+    last_exc: Exception = CruxNoDataError(f"No CrUX history data for {origin}")
 
-    if response.status_code == 404:
-        raise CruxNoDataError(f"No CrUX history data for {origin}")
+    for candidate in _candidate_origins(origin):
+        response = httpx.post(
+            url=f"{_CRUX_HISTORY_ENDPOINT}?key={settings.crux_api_key}",
+            json={"origin": candidate, "formFactor": form_factor},
+            headers={"Content-Type": "application/json"},
+            timeout=20.0,
+        )
+        if response.status_code == 404:
+            last_exc = CruxNoDataError(f"No CrUX history data for {candidate}")
+            continue
+        response.raise_for_status()
+        return _parse_history(response.json(), candidate, form_factor)
 
-    response.raise_for_status()
-    return _parse_history(response.json(), origin, form_factor)
+    raise last_exc
 
 
 def _parse_history(raw: dict, origin: str, form_factor: str) -> dict:
