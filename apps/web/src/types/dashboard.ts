@@ -151,6 +151,8 @@ export interface OnPageData {
 
 // ── CrUX (Core Web Vitals) ────────────────────────────────────────────────────
 export type CrUXRating = "good" | "needs_improvement" | "poor" | "no_data";
+export type CrUXTrend  = "improving" | "degrading" | "stable" | "no_data";
+
 export interface CrUXMetric { p75: number | null; unit: string; rating: CrUXRating }
 export interface CrUXData {
   origin: string; form_factor: string;
@@ -163,6 +165,36 @@ export interface CrUXData {
     experimental_time_to_first_byte: CrUXMetric;
   };
   performance_score: number;
+}
+
+export interface CrUXHistoryTimeseriesPoint {
+  date_from: string | null;
+  date_to:   string | null;
+  p75:       number | null;
+  rating:    CrUXRating;
+}
+export interface CrUXHistoryMetric {
+  unit:           string;
+  timeseries:     CrUXHistoryTimeseriesPoint[];
+  current_p75:    number | null;
+  previous_p75:   number | null;
+  current_rating: CrUXRating;
+  trend:          CrUXTrend;
+  delta_pct:      number | null;
+}
+export interface CrUXHistoryData {
+  origin:            string;
+  form_factor:       string;
+  data_points_count: number;
+  first_date:        string | null;
+  last_date:         string | null;
+  metrics: {
+    largest_contentful_paint:        CrUXHistoryMetric;
+    interaction_to_next_paint:       CrUXHistoryMetric;
+    cumulative_layout_shift:         CrUXHistoryMetric;
+    first_contentful_paint:          CrUXHistoryMetric;
+    experimental_time_to_first_byte: CrUXHistoryMetric;
+  };
 }
 
 // ── Health Score ──────────────────────────────────────────────────────────────
@@ -253,6 +285,7 @@ export interface DashboardAuditResult {
     keyword_data?:  KeywordData           | { error: string; detail?: string };
     onpage?:        OnPageData            | { error: string; detail?: string };
     crux?:          CrUXData              | { error: string; detail?: string };
+    crux_history?:  CrUXHistoryData       | { error: string; detail?: string };
     business_info?: BusinessProfileData   | { error: string; detail?: string };  // NUEVO
     reviews?:       ReviewsData           | { error: string; detail?: string };  // NUEVO
   };

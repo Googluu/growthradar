@@ -33,7 +33,7 @@ _engine = create_engine(_sync_db_url, pool_pre_ping=True)
 @celery_app.task(name="dashboard.run_dashboard_audit", bind=True, max_retries=1)
 def run_dashboard_audit(self, job_id: str) -> dict:  # type: ignore[type-arg]
     from src.models.dashboard_job import DashboardJob
-    from src.services.crux import CruxNoDataError, query_crux
+    from src.services.crux import CruxNoDataError, query_crux, query_crux_history
     from src.services.dataforseo import (
         calculate_seo_score,
         get_business_listings_search,
@@ -128,6 +128,15 @@ def run_dashboard_audit(self, job_id: str) -> dict:  # type: ignore[type-arg]
                     data = {"error": "timeout", "detail": str(exc)}
                 return "crux", data
 
+            def _crux_history() -> tuple[str, dict]:
+                try:
+                    data = query_crux_history(origin_url)
+                except CruxNoDataError:
+                    data = {"error": "no_data", "detail": f"No CrUX history for {origin_url}"}
+                except Exception as exc:
+                    data = {"error": "timeout", "detail": str(exc)}
+                return "crux_history", data
+
             def _business_info() -> tuple[str, dict | None]:
                 if not google_business_keyword:
                     return "business_info", None
@@ -141,9 +150,9 @@ def run_dashboard_audit(self, job_id: str) -> dict:  # type: ignore[type-arg]
                     data = {"error": "business_info_failed", "detail": str(exc)}
                 return "business_info", data
 
-            with ThreadPoolExecutor(max_workers=5) as pool:
+            with ThreadPoolExecutor(max_workers=6) as pool:
                 futures = [pool.submit(fn) for fn in (
-                    _onpage, _serp, _labs, _crux, _business_info,
+                    _onpage, _serp, _labs, _crux, _crux_history, _business_info,
                 )]
                 for future in as_completed(futures):
                     try:

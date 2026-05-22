@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { readFreeReport } from "@/lib/audit";
-import type { OnPageData, CrUXData } from "@/types/dashboard";
+import type { OnPageData, CrUXData, CrUXHistoryData } from "@/types/dashboard";
 import { OnPageAuditSection } from "@/components/dashboard/OnPageAuditSection";
 import { CoreWebVitalsSection } from "@/components/dashboard/CoreWebVitalsSection";
 import { EmptySection } from "@/components/dashboard/EmptySection";
@@ -16,7 +16,8 @@ type Tab = "onpage" | "crux";
 export default function SitioWebPage() {
   const [tab,     setTab]     = useState<Tab>("onpage");
   const [onpage,  setOnpage]  = useState<OnPageData | null>(null);
-  const [crux,    setCrux]    = useState<CrUXData | null>(null);
+  const [crux,        setCrux]        = useState<CrUXData | null>(null);
+  const [cruxHistory, setCruxHistory] = useState<CrUXHistoryData | null>(null);
   const [loaded,  setLoaded]  = useState(false);
 
   useEffect(() => {
@@ -24,7 +25,8 @@ export default function SitioWebPage() {
     if (report?.auditResult?.sections) {
       const s = report.auditResult.sections;
       if (s.onpage && !("error" in s.onpage)) setOnpage(s.onpage as OnPageData);
-      if (s.crux   && !("error" in s.crux))   setCrux(s.crux as CrUXData);
+      if (s.crux         && !("error" in s.crux))         setCrux(s.crux as CrUXData);
+      if (s.crux_history && !("error" in s.crux_history)) setCruxHistory(s.crux_history as CrUXHistoryData);
     }
     setLoaded(true);
   }, []);
@@ -71,7 +73,7 @@ export default function SitioWebPage() {
       </div>
 
       {tab === "onpage" && onpage  && <OnPageAuditSection data={onpage}/>}
-      {tab === "crux"   && crux    && <CoreWebVitalsSection data={crux}/>}
+      {tab === "crux"   && crux    && <CoreWebVitalsSection current={crux} history={cruxHistory}/>}
     </div>
   );
 }
