@@ -7,6 +7,7 @@ import type {
   SerpTargetVisibility,
   SerpAiOverview,
   SerpRankingDistribution,
+  SerpPerspective,
 } from "@/types/dashboard";
 
 // ── EDA color tokens (dark dashboard) ────────────────────────────────────────
@@ -38,6 +39,8 @@ const fmtDate = (iso: string) =>
     day: "2-digit", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
+
+const normDomain = (d: string) => d.replace(/^www\./, "");
 
 // ── Inline SVG icons ──────────────────────────────────────────────────────────
 function Icon({ size = 16, children }: { size?: number; children: React.ReactNode }) {
@@ -140,6 +143,9 @@ const IconArrowUp = ({ size }: { size?: number }) => (
     <line x1="12" y1="19" x2="12" y2="5"/>
     <polyline points="5 12 12 5 19 12"/>
   </Icon>
+);
+const IconVideo = ({ size }: { size?: number }) => (
+  <Icon size={size}><polygon points="5 3 19 12 5 21 5 3"/></Icon>
 );
 
 // ── Building blocks ───────────────────────────────────────────────────────────
@@ -379,10 +385,10 @@ function TopDomains({ domains, target, top3 }: {
 
       <ol style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 6, padding: 0, margin: 0 }}>
         {domains.map((d, i) => {
-          const isTarget = target?.found && d === target.domain;
+          const isTarget = target?.found && normDomain(d) === normDomain(target.domain);
           const isTop3 = top3.includes(d);
           return (
-            <li key={d} style={{
+            <li key={`${d}-${i}`} style={{
               display: "flex", alignItems: "center", gap: 12,
               padding: "8px 12px", borderRadius: 8,
               background: isTarget ? Gs : "transparent",
@@ -621,7 +627,7 @@ function ResultsTable({ rows, target }: {
           </thead>
           <tbody>
             {sorted.map(r => {
-              const isTarget = target?.found && r.domain === target.domain;
+              const isTarget = target?.found && normDomain(r.domain) === normDomain(target.domain);
               const isExp = expanded === r.rank_absolute;
               return (
                 <React.Fragment key={r.rank_absolute}>
@@ -649,6 +655,9 @@ function ResultsTable({ rows, target }: {
                         </div>
                         {r.is_featured_snippet && (
                           <span title="Featured snippet"><IconStar size={14} filled /></span>
+                        )}
+                        {r.is_video && (
+                          <span title="Resultado de video" style={{ color: C.blue }}><IconVideo size={13} /></span>
                         )}
                       </div>
                     </td>
@@ -860,6 +869,73 @@ function OpsFooter({ data }: { data: SerpData }) {
   );
 }
 
+// ── Perspectives carousel ─────────────────────────────────────────────────────
+function PerspectivesCard({ items }: { items: SerpPerspective[] }) {
+  return (
+    <Card style={{ padding: 24, marginBottom: 28 }}>
+      <div style={{ marginBottom: 16 }}>
+        <h3 style={{
+          fontFamily: "var(--font-syne), sans-serif", fontWeight: 700, fontSize: 17,
+          color: C.text, letterSpacing: "-0.01em", marginBottom: 4,
+        }}>
+          Perspectives
+        </h3>
+        <p style={{ fontSize: 12, color: C.text3, fontFamily: "var(--font-inter), sans-serif" }}>
+          Contenido diverso que aparece en el carrusel de perspectivas de Google
+        </p>
+      </div>
+      <div className="chip-scroll" style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 4 }}>
+        {items.map(p => (
+          <a key={p.url} href={p.url} target="_blank" rel="noreferrer" style={{
+            flexShrink: 0, width: 220,
+            padding: "14px 16px",
+            background: "rgba(255,255,255,0.04)",
+            border: `1px solid ${C.border}`,
+            borderRadius: 12, textDecoration: "none",
+            display: "flex", flexDirection: "column", gap: 8,
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = C.borderStrong;
+            e.currentTarget.style.background = C.cardHover;
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = C.border;
+            e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={fav(p.domain)} alt="" width={14} height={14} style={{ borderRadius: 2, flexShrink: 0 }} />
+              <span style={{
+                fontSize: 11, color: C.text3,
+                fontFamily: "var(--font-inter), sans-serif",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
+                {p.source}
+              </span>
+            </div>
+            <div style={{
+              fontSize: 13, color: C.text, fontWeight: 500,
+              fontFamily: "var(--font-inter), sans-serif",
+              overflow: "hidden",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical" as const,
+            }}>
+              {p.title}
+            </div>
+            {p.date && (
+              <div style={{ fontSize: 11, color: C.text4, fontFamily: "var(--font-inter), sans-serif" }}>
+                {p.date}
+              </div>
+            )}
+          </a>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 export function SerpSection({ data, onSearchAgain }: {
   data: SerpData;
@@ -900,8 +976,14 @@ export function SerpSection({ data, onSearchAgain }: {
           {data.serp_features.includes("people_also_ask") && (
             <Badge>People also ask</Badge>
           )}
+          {data.serp_features.includes("people_also_search") && (
+            <Badge>People also search</Badge>
+          )}
           {data.serp_features.includes("knowledge_graph") && (
             <Badge>Knowledge Graph</Badge>
+          )}
+          {data.serp_features.includes("perspectives") && data.perspectives.length > 0 && (
+            <Badge tone="blue">Perspectives · {data.perspectives_count}</Badge>
           )}
         </div>
       </header>
@@ -920,6 +1002,11 @@ export function SerpSection({ data, onSearchAgain }: {
         <div style={{ marginBottom: 28 }}>
           <AIOverview ai={data.ai_overview} />
         </div>
+      )}
+
+      {/* Perspectives */}
+      {data.perspectives.length > 0 && (
+        <PerspectivesCard items={data.perspectives} />
       )}
 
       {/* Results table + sidebar */}
