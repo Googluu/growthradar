@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { readFreeReport } from "@/lib/audit";
-import type { OnPageData, CrUXData, CrUXHistoryData } from "@/types/dashboard";
+import type { OnPageData, CrUXData, CrUXHistoryData, Recommendation } from "@/types/dashboard";
 import { OnPageAuditSection } from "@/components/dashboard/OnPageAuditSection";
 import { CoreWebVitalsSection } from "@/components/dashboard/CoreWebVitalsSection";
 import { EmptySection } from "@/components/dashboard/EmptySection";
@@ -18,15 +18,19 @@ export default function SitioWebPage() {
   const [onpage,  setOnpage]  = useState<OnPageData | null>(null);
   const [crux,        setCrux]        = useState<CrUXData | null>(null);
   const [cruxHistory, setCruxHistory] = useState<CrUXHistoryData | null>(null);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loaded,  setLoaded]  = useState(false);
 
   useEffect(() => {
     const report = readFreeReport();
-    if (report?.auditResult?.sections) {
-      const s = report.auditResult.sections;
-      if (s.onpage && !("error" in s.onpage)) setOnpage(s.onpage as OnPageData);
-      if (s.crux         && !("error" in s.crux))         setCrux(s.crux as CrUXData);
-      if (s.crux_history && !("error" in s.crux_history)) setCruxHistory(s.crux_history as CrUXHistoryData);
+    if (report?.auditResult) {
+      const { sections, recommendations: recs } = report.auditResult;
+      if (sections) {
+        if (sections.onpage && !("error" in sections.onpage)) setOnpage(sections.onpage as OnPageData);
+        if (sections.crux         && !("error" in sections.crux))         setCrux(sections.crux as CrUXData);
+        if (sections.crux_history && !("error" in sections.crux_history)) setCruxHistory(sections.crux_history as CrUXHistoryData);
+      }
+      if (recs?.top_recommendations?.length) setRecommendations(recs.top_recommendations);
     }
     setLoaded(true);
   }, []);
@@ -72,7 +76,7 @@ export default function SitioWebPage() {
         ))}
       </div>
 
-      {tab === "onpage" && onpage  && <OnPageAuditSection data={onpage}/>}
+      {tab === "onpage" && onpage  && <OnPageAuditSection data={onpage} recommendations={recommendations}/>}
       {tab === "crux"   && crux    && <CoreWebVitalsSection current={crux} history={cruxHistory}/>}
     </div>
   );

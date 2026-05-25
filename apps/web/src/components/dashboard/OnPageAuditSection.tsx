@@ -1,20 +1,27 @@
 "use client";
 
-import type { OnPageData } from "@/types/dashboard";
+import type { OnPageData, Recommendation } from "@/types/dashboard";
 import { scoreColor, C, Card, SectionTitle } from "./onpage/shared";
-import { HeroCard }            from "./onpage/HeroCard";
-import { HttpStatusDonut }     from "./onpage/HttpStatusDonut";
-import { IssuesCard }          from "./onpage/IssuesCard";
-import { PassingChecksCard }   from "./onpage/PassingChecksCard";
-import { PerformanceGauges }   from "./onpage/PerformanceGauges";
-import { ResourcesBar }        from "./onpage/ResourcesBar";
-import { HeadingsHierarchy }   from "./onpage/HeadingsHierarchy";
-import { ContentMetrics }      from "./onpage/ContentMetrics";
-import { ResourceErrorsCard }  from "./onpage/ResourceErrorsCard";
-import { SocialPreviews }      from "./onpage/SocialPreviews";
-import { OpsFooter }           from "./onpage/OpsFooter";
+import { HeroCard }               from "./onpage/HeroCard";
+import { HttpStatusDonut }        from "./onpage/HttpStatusDonut";
+import { IssuesCard }             from "./onpage/IssuesCard";
+import { PassingChecksCard }      from "./onpage/PassingChecksCard";
+import { PerformanceGauges }      from "./onpage/PerformanceGauges";
+import { ResourcesBar }           from "./onpage/ResourcesBar";
+import { HeadingsHierarchy }      from "./onpage/HeadingsHierarchy";
+import { ContentMetrics }         from "./onpage/ContentMetrics";
+import { ResourceErrorsCard }     from "./onpage/ResourceErrorsCard";
+import { SocialPreviews }         from "./onpage/SocialPreviews";
+import { OpsFooter }              from "./onpage/OpsFooter";
+import { RecommendationsCard }    from "./onpage/RecommendationsCard";
 
-export function OnPageAuditSection({ data }: { data: OnPageData }) {
+export function OnPageAuditSection({
+  data,
+  recommendations,
+}: {
+  data: OnPageData;
+  recommendations?: Recommendation[];
+}) {
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
 
@@ -83,6 +90,11 @@ export function OnPageAuditSection({ data }: { data: OnPageData }) {
 
       {/* Social previews: Google + FB + Twitter */}
       <SocialPreviews data={data} />
+
+      {/* Recommendations from AI audit */}
+      {recommendations && recommendations.length > 0 && (
+        <RecommendationsCard recommendations={recommendations} />
+      )}
 
       {/* Ops footer: cost + time + link */}
       <OpsFooter data={data} />
