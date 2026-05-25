@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import type { LabsKeyword } from "@/types/dashboard";
 import {
   G, C,
@@ -301,8 +301,8 @@ export function KeywordsTable({ keywords }: { keywords: LabsKeyword[] }) {
                 const isOpen = expanded.has(k.keyword);
 
                 return (
-                  <>
-                    <tr key={`row-${i}`}
+                  <React.Fragment key={k.keyword}>
+                    <tr
                       onClick={() => hasSubs && toggleExpand(k.keyword)}
                       style={{ transition: "background 0.12s", cursor: hasSubs ? "pointer" : "default" }}
                       onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
@@ -398,7 +398,7 @@ export function KeywordsTable({ keywords }: { keywords: LabsKeyword[] }) {
 
                     {/* Expandable sub-keywords row */}
                     {isOpen && hasSubs && (
-                      <tr key={`sub-${i}`} style={{ background: "rgba(255,255,255,0.015)" }}>
+                      <tr style={{ background: "rgba(255,255,255,0.015)" }}>
                         <td colSpan={7} style={{ padding: "12px 20px 16px 48px", borderBottom: `1px solid ${C.border}` }}>
                           <div style={{ fontSize: 10.5, color: C.text3, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }}>
                             Sub-keywords relacionadas
@@ -422,7 +422,7 @@ export function KeywordsTable({ keywords }: { keywords: LabsKeyword[] }) {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </React.Fragment>
                 );
               })}
             </tbody>
