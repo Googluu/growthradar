@@ -1,20 +1,11 @@
 """
 src/routes/public_audits.py
 
-ACTUALIZACIÓN: el endpoint /public/dashboard-audit ahora acepta TODOS los
-params del AuditFormData del frontend, no solo {domain, keyword}.
-
-Cambios principales:
-  1. DashboardAuditRequest acepta business_name, target_keywords[],
-     google_business_keyword, fetch_reviews, location_code, language_code
-  2. _build_cache_key() genera hash determinístico de los params para dedup
-     correcto (antes solo deduplicaba por dominio → bug si dos requests
-     del mismo dominio con keywords distintas)
-  3. Pasa todos los params al Celery task run_dashboard_audit
-
-Este archivo SOLO contiene el bloque /dashboard-audit. El resto de los
-endpoints (/audit, /business-profile, /discover-prospects) se mantienen
-sin cambios — los podés dejar como están.
+Endpoints públicos (sin autenticación):
+  POST /public/dashboard-audit            → auditoría completa (async, Celery)
+  GET  /public/dashboard-audit/{job_id}   → polling del job
+  POST /public/business-profile           → perfil Google Business (sync, directo)
+  POST /public/discover-prospects         → discovery de prospectos (sync, directo)
 """
 
 import hashlib
@@ -22,7 +13,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -226,3 +217,49 @@ async def get_dashboard_audit_status(
         result=job.result,
         error=job.error,
     )
+
+
+# ── POST /public/business-profile ─────────────────────────────────────────────
+
+class BusinessProfileRequest(BaseModel):
+    keyword:       str
+    location_code: int = 2170   # Colombia default
+    language_code: str = "es"
+
+
+@router.post("/business-profile")
+def get_business_profile(body: BusinessProfileRequest):
+    """
+    Consulta el perfil de Google Business de un negocio por nombre / keyword.
+
+    Endpoint síncrono — llama a DataForSEO business_data/google/my_business_info/live
+    directamente y devuelve el perfil normalizado en ~1-3 s.
+
+    Errores:
+      404 → negocio no encontrado en Google
+      502 → error de DataForSEO o parseo
+    """
+    from src.services.dataforseo import get_my_business_info
+
+    result = get_my_business_info(
+        keyword=body.keyword.strip(),
+        location_code=body.location_code,
+        language_code=body.language_code,
+    )
+
+    # Error de llamada o parseo
+    if "error" in result:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=result.get("detail") or result.get("status_message") or "Error consultando DataForSEO",
+        )
+
+    # Sin resultados
+    if not result.get("found"):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No se encontró '{body.keyword}' en Google Business. "
+                   "Intenta con el nombre exacto tal como aparece en Google Maps.",
+        )
+
+    return result
